@@ -20,18 +20,30 @@
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'nor1c-viewer-close';
-    closeBtn.innerHTML = '&#10005;';
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
     closeBtn.addEventListener('click', closeViewer);
     overlay.appendChild(closeBtn);
 
     const toolbar = document.createElement('div');
     toolbar.className = 'nor1c-viewer-toolbar';
     toolbar.innerHTML = `
-      <button id="nor1c-zoom-out" title="Zoom Out">&#8722;</button>
-      <span class="zoom-label" id="nor1c-zoom-label">100%</span>
-      <button id="nor1c-zoom-in" title="Zoom In">+</button>
-      <button id="nor1c-zoom-reset" title="Reset">&#8634;</button>
-      <button id="nor1c-download" title="Download">&#8615;</button>
+      <div class="toolbar-group">
+        <button class="toolbar-btn" id="nor1c-zoom-out" title="Zoom Out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/></svg>
+        </button>
+        <span class="zoom-label" id="nor1c-zoom-label">100%</span>
+        <button class="toolbar-btn" id="nor1c-zoom-in" title="Zoom In">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5v14"/></svg>
+        </button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <button class="toolbar-btn" id="nor1c-zoom-reset" title="Fit to screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M4 9a9 9 0 0115.3-4.7M20 15a9 9 0 01-15.3 4.7"/></svg>
+      </button>
+      <div class="toolbar-divider"></div>
+      <button class="toolbar-btn" id="nor1c-download" title="Download">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      </button>
     `;
     overlay.appendChild(toolbar);
 
@@ -238,5 +250,12 @@
       srcUrl = e.target.src;
     }
     if (srcUrl) openViewer(srcUrl);
+  });
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'open-image-viewer' && msg.srcUrl) {
+      openViewer(msg.srcUrl);
+      sendResponse({ success: true });
+    }
   });
 })();

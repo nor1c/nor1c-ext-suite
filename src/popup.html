@@ -64,7 +64,7 @@
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Video Download</div>
-          <div class="toggle-desc">Show download button overlay on video players</div>
+          <div class="toggle-desc">Auto-detect videos on page for download</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="video-download-toggle">
@@ -72,6 +72,11 @@
         </label>
       </div>
     </div>
+  </div>
+
+  <div id="video-sources-section" style="display:none; border-top: 1px solid #e8f0fe; background: #ffffff;">
+    <iframe id="video-downloader-frame" src="video-downloader-popup.html"
+      style="width:100%; height:0; border:none; border-radius:0 0 8px 8px; display:block;"></iframe>
   </div>
 
   <footer class="footer">

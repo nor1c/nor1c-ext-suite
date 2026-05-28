@@ -9,17 +9,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   for (const key of keys) {
-    document.getElementById(`${toKebab(key)}-toggle`).addEventListener('change', async (e) => {
+    document.getElementById(`${toKebab(key)}-toggle`).addEventListener('change', async e => {
       await chrome.storage.sync.set({ [key]: e.target.checked });
-      if (key === 'videoControls') {
-        updateSiteExcludeVisibility(e.target.checked);
-      }
+      if (key === 'videoControls') updateSiteExcludeVisibility(e.target.checked);
+      if (key === 'videoDownload') updateVideoDownloaderFrame(e.target.checked);
     });
   }
 
   const siteCard = document.getElementById('site-exclude-card');
   const siteToggle = document.getElementById('site-exclude-toggle');
-  const siteLabel = document.getElementById('site-exclude-label');
   const siteDesc = document.getElementById('site-exclude-desc');
 
   let currentDomain = null;
@@ -34,45 +32,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     siteCard.style.display = videoControlsOn && currentDomain ? '' : 'none';
   }
 
+  let frameResizeTimer = null;
+
+  function updateVideoDownloaderFrame(videoDownloadOn) {
+    const section = document.getElementById('video-sources-section');
+    const frame = document.getElementById('video-downloader-frame');
+    if (videoDownloadOn) {
+      section.style.display = '';
+      frame.style.display = '';
+      frame.src = frame.src || 'video-downloader-popup.html';
+      startFrameResize(frame);
+    } else {
+      section.style.display = 'none';
+      frame.style.display = 'none';
+      stopFrameResize();
+    }
+  }
+
+  function startFrameResize(frame) {
+    stopFrameResize();
+    frameResizeTimer = setInterval(function() {
+      try {
+        var body = frame.contentDocument && frame.contentDocument.body;
+        if (!body) return;
+        var h = body.scrollHeight;
+        if (h > 0 && frame.style.height !== h + 'px') {
+          frame.style.height = h + 'px';
+        }
+      } catch(e) {}
+    }, 200);
+  }
+
+  function stopFrameResize() {
+    if (frameResizeTimer) { clearInterval(frameResizeTimer); frameResizeTimer = null; }
+  }
+
   async function loadSiteExclude() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.url) return;
 
-    let hostname;
     try {
-      hostname = new URL(tab.url).hostname;
+      const hostname = new URL(tab.url).hostname;
+      currentDomain = getDomain(hostname);
+      siteDesc.textContent = currentDomain;
     } catch (_) {
       siteCard.style.display = 'none';
       return;
     }
 
-    currentDomain = getDomain(hostname);
-    siteDesc.textContent = currentDomain;
-
     const excludedResult = await chrome.storage.sync.get(['videoControlsExcluded']);
     const excluded = excludedResult.videoControlsExcluded || [];
     siteToggle.checked = excluded.indexOf(currentDomain) !== -1;
     updateSiteExcludeVisibility(document.getElementById('video-controls-toggle').checked);
+
+    sendTabTitle(tab.title);
   }
 
-  siteToggle.addEventListener('change', async (e) => {
-    if (!currentDomain) return;
-    const result = await chrome.storage.sync.get(['videoControlsExcluded']);
-    const excluded = result.videoControlsExcluded || [];
-    const idx = excluded.indexOf(currentDomain);
-
-    if (e.target.checked && idx === -1) {
-      excluded.push(currentDomain);
-    } else if (!e.target.checked && idx !== -1) {
-      excluded.splice(idx, 1);
+  function sendTabTitle(title) {
+    const frame = document.getElementById('video-downloader-frame');
+    if (!title || !frame) return;
+    function post(t) {
+      try { frame.contentWindow.postMessage({ type: 'tab-title', title: t }, '*'); } catch(e) {}
     }
+    post(title);
+    setTimeout(function() { post(title); }, 500);
+    setTimeout(function() {
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs && tabs[0] && tabs[0].title) post(tabs[0].title);
+      });
+    }, 3000);
+    setTimeout(function() {
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs && tabs[0] && tabs[0].title) post(tabs[0].title);
+      });
+    }, 6000);
+  }
 
+  siteToggle.addEventListener('change', async e => {
+    if (!currentDomain) return;
+    const res = await chrome.storage.sync.get(['videoControlsExcluded']);
+    const excluded = res.videoControlsExcluded || [];
+    const idx = excluded.indexOf(currentDomain);
+    if (e.target.checked && idx === -1) excluded.push(currentDomain);
+    else if (!e.target.checked && idx !== -1) excluded.splice(idx, 1);
     await chrome.storage.sync.set({ videoControlsExcluded: excluded });
   });
 
   await loadSiteExclude();
+
+  const videoDownloadOn = document.getElementById('video-download-toggle').checked;
+  updateVideoDownloaderFrame(videoDownloadOn);
 });
 
 function toKebab(camel) {
-  return camel.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+  return camel.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
 }

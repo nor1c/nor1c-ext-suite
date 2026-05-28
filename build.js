@@ -11,13 +11,19 @@ const COPY_FILES = [
   'popup.html',
   'popup.css',
   'popup.js',
-  'background.js'
+  'background.js',
+  'background-video-downloader.js',
+  'video-downloader-popup.html',
+  'video-downloader-popup.js',
+  'video-downloader-popup.css',
+  'watcher.js'
 ];
 
 const COPY_DIRS = [
   'content',
   'lib',
-  'icons'
+  'icons',
+  'assets'
 ];
 
 const ICON_SIZES = [16, 48, 128];

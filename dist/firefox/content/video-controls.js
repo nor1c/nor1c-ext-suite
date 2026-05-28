@@ -4,6 +4,8 @@
   let walkInterval = null;
   const timestamps = new WeakMap();
   const overlaysDone = new WeakSet();
+  const volumeState = new WeakMap();
+  const syncing = new WeakSet();
 
   const styleEl = document.createElement('style');
   styleEl.id = 'nor1c-video-controls-force';
@@ -30,6 +32,8 @@
     video[nor1c]::-webkit-media-controls-auto-play-button,
     video[nor1c]::-webkit-media-controls-start-playback-button,
     video[nor1c]::-webkit-media-controls-overlay-play-button { display: none !important; }
+    video[nor1c]::-webkit-media-controls-panel { margin-bottom: 40px !important; }
+    video[nor1c] { padding-bottom: 40px !important; object-fit: contain !important; }
   `;
   if (document.head || document.documentElement) {
     (document.head || document.documentElement).appendChild(styleEl);
@@ -52,6 +56,54 @@
     if (overlaysDone.has(container)) return;
     overlaysDone.add(container);
     container.style.setProperty('pointer-events', 'none', 'important');
+  }
+
+  function findInstagramMuteButton(video) {
+    var container = video.closest('article, [role="dialog"], main, section') || video.parentElement;
+    if (!container) return null;
+
+    var svg = container.querySelector('svg[aria-label="Audio is playing"], svg[aria-label="Audio is muted"]');
+    if (svg) {
+      var btn = svg.closest('[role="button"], button');
+      if (btn) return btn;
+    }
+
+    var btnAlt = container.querySelector('button[aria-label="Toggle audio"], button[aria-label*="audio" i]');
+    if (btnAlt) return btnAlt;
+
+    return null;
+  }
+
+  function syncInstagramButton(video) {
+    if (syncing.has(video)) return;
+    syncing.add(video);
+    var btn = findInstagramMuteButton(video);
+    if (!btn) { syncing.delete(video); return; }
+    var svg = btn.querySelector('svg[aria-label]');
+    if (!svg) { syncing.delete(video); return; }
+    var label = svg.getAttribute('aria-label');
+    var isPlaying = label === 'Audio is playing';
+    if (video.muted && isPlaying) {
+      btn.click();
+    } else if (!video.muted && !isPlaying) {
+      btn.click();
+    }
+    setTimeout(function () { syncing.delete(video); }, 100);
+  }
+
+  function liftSoundButton(video) {
+    var btn = findInstagramMuteButton(video);
+    if (!btn) return;
+    var limit = video.closest('article, [role="dialog"], main, section') || document.documentElement;
+    var el = btn;
+    while (el && el !== limit) {
+      el.style.setProperty('z-index', '2147483647', 'important');
+      if (getComputedStyle(el).position === 'static') {
+        el.style.setProperty('position', 'relative', 'important');
+      }
+      el = el.parentElement;
+    }
+    btn.style.setProperty('z-index', '2147483647', 'important');
   }
 
   function disableOverlays(video) {
@@ -104,6 +156,71 @@
 
     liftStackingContexts(video);
     disableOverlays(video);
+    setupVolumeGuard(video);
+    liftSoundButton(video);
+  }
+
+  function setupVolumeGuard(video) {
+    if (volumeState.has(video)) return;
+
+    var nativeMutedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
+    var nativeVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+    volumeState.set(video, { muted: video.muted, volume: video.volume });
+
+    var _muted = video.muted;
+
+    Object.defineProperty(video, 'muted', {
+      get: function () { return _muted; },
+      set: function (val) {
+        var prev = _muted;
+        _muted = val;
+        volumeState.set(video, { muted: val, volume: video.volume });
+        if (prev !== val && !syncing.has(video)) syncInstagramButton(video);
+      },
+      configurable: true
+    });
+
+    Object.defineProperty(video, 'volume', {
+      get: function () { return nativeVolumeDesc.get.call(video); },
+      set: function (val) {
+        nativeVolumeDesc.set.call(video, val);
+        volumeState.set(video, { muted: _muted, volume: val });
+      },
+      configurable: true
+    });
+
+    video.addEventListener('volumechange', function () {
+      _muted = nativeMutedDesc.get.call(video);
+      volumeState.set(video, { muted: _muted, volume: nativeVolumeDesc.get.call(video) });
+    });
+
+    video.addEventListener('seeking', function () {
+      var saved = volumeState.get(video);
+      if (saved) {
+        _muted = saved.muted;
+        nativeMutedDesc.set.call(video, saved.muted);
+        nativeVolumeDesc.set.call(video, saved.volume);
+        syncInstagramButton(video);
+      }
+    });
+
+    video.addEventListener('playing', function () {
+      var saved = volumeState.get(video);
+      if (saved) {
+        _muted = saved.muted;
+        nativeMutedDesc.set.call(video, saved.muted);
+        nativeVolumeDesc.set.call(video, saved.volume);
+      }
+    });
+
+    var mutedObs = new MutationObserver(function () {
+      var saved = volumeState.get(video);
+      if (saved && nativeMutedDesc.get.call(video) !== saved.muted) {
+        nativeMutedDesc.set.call(video, saved.muted);
+        syncInstagramButton(video);
+      }
+    });
+    mutedObs.observe(video, { attributes: true, attributeFilter: ['muted'] });
   }
 
   function processAll() {
@@ -189,7 +306,13 @@
           v.controls = true;
           v.setAttribute('controls', 'true');
         }
+        var saved = volumeState.get(v);
+        if (saved) {
+          if (v.muted !== saved.muted) v.muted = saved.muted;
+          if (v.volume !== saved.volume) v.volume = saved.volume;
+        }
         disableOverlays(v);
+        liftSoundButton(v);
       });
 
       document.querySelectorAll('[aria-label="Video player"]').forEach(nukeOverlay);
@@ -234,16 +357,9 @@
   function init() {
     var domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoDownload', 'videoControlsExcluded'], function (result) {
-      var wasVideoDownload = result.videoDownload !== undefined ? result.videoDownload : false;
+    chrome.storage.sync.get(['videoControls', 'videoControlsExcluded'], function (result) {
       var enabled = result.videoControls !== undefined ? result.videoControls : false;
       var excluded = result.videoControlsExcluded || [];
-
-      if (wasVideoDownload && !enabled) {
-        enabled = true;
-        chrome.storage.sync.set({ videoControls: true });
-        chrome.storage.sync.remove('videoDownload');
-      }
 
       if (enabled && !isExcluded(excluded, domain)) {
         start();

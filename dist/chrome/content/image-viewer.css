@@ -24,31 +24,38 @@
   transition: transform 0.05s ease-out;
   pointer-events: none;
   box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
 }
 
 .nor1c-viewer-close {
   position: fixed;
   top: 16px;
   right: 16px;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: none;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 50%;
-  color: #fff;
-  font-size: 24px;
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   z-index: 2147483648;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
-  line-height: 1;
+  transition: all 0.2s;
   padding: 0;
+  opacity: 0.6;
 }
 
 .nor1c-viewer-close:hover {
-  background: rgba(255, 255, 255, 0.3);
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+}
+
+.nor1c-viewer-close svg {
+  width: 20px;
+  height: 20px;
 }
 
 .nor1c-viewer-toolbar {
@@ -57,36 +64,68 @@
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 4px;
   z-index: 2147483648;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
+  background: rgba(30, 30, 35, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 6px 12px;
+  padding: 4px 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.nor1c-viewer-toolbar button {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 8px;
-  transition: background 0.15s;
+.toolbar-group {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-family: 'Inter', sans-serif;
+  gap: 2px;
 }
 
-.nor1c-viewer-toolbar button:hover {
-  background: rgba(255, 255, 255, 0.2);
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.toolbar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.toolbar-btn:active {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(0.92);
 }
 
 .nor1c-viewer-toolbar .zoom-label {
-  font-size: 13px;
-  font-weight: 500;
-  min-width: 50px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  min-width: 44px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 0 4px;
 }
