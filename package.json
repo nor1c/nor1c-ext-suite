@@ -1,0 +1,14 @@
+{
+  "name": "nor1c-suite-ext",
+  "version": "1.0.0",
+  "description": "Multi-function browser extension",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "build:chrome": "node build.js chrome",
+    "build:firefox": "node build.js firefox"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.0"
+  }
+}

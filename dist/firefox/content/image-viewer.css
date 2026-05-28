@@ -1,0 +1,92 @@
+.nor1c-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.nor1c-viewer-overlay.dragging {
+  cursor: grabbing;
+}
+
+.nor1c-viewer-overlay img {
+  max-width: 90vw;
+  max-height: 90vh;
+  transition: transform 0.05s ease-out;
+  pointer-events: none;
+  box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+}
+
+.nor1c-viewer-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 2147483648;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  line-height: 1;
+  padding: 0;
+}
+
+.nor1c-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.nor1c-viewer-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 2147483648;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 6px 12px;
+}
+
+.nor1c-viewer-toolbar button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', sans-serif;
+}
+
+.nor1c-viewer-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.nor1c-viewer-toolbar .zoom-label {
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 50px;
+  text-align: center;
+}

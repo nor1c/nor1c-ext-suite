@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+  <title>Nor1c Suite</title>
+</head>
+<body>
+  <header class="header">
+    <h1 class="title">Nor1c Suite</h1>
+    <span class="version">v1.0.0</span>
+  </header>
+
+  <div class="toggles">
+    <div class="toggle-section">
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Image Blocker</div>
+          <div class="toggle-desc">Block all images on every website</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="image-blocker-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">GIF Blocker</div>
+          <div class="toggle-desc">Block only GIF images</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="gif-blocker-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Video Controls</div>
+          <div class="toggle-desc">Force HTML5 controls on all video players</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="video-controls-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
+        <div class="toggle-info">
+          <div class="toggle-label" id="site-exclude-label">Disable for this site</div>
+          <div class="toggle-desc" id="site-exclude-desc"></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="site-exclude-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Video Download</div>
+          <div class="toggle-desc">Show download button overlay on video players</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="video-download-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
