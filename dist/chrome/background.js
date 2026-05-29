@@ -16,6 +16,7 @@ chrome.runtime.onInstalled.addListener(() => {
     gifBlocker: false,
     videoControls: false,
     videoDownload: false,
+    adLinkBypass: true,
     videoControlsExcluded: []
   });
 
@@ -31,10 +32,24 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
+// Auto-close tabs blocked by Brave ad blocker
+let _adBypassEnabled = true;
+chrome.storage.sync.get(['adLinkBypass'], r => { _adBypassEnabled = r.adLinkBypass !== false; });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.adLinkBypass) _adBypassEnabled = changes.adLinkBypass.newValue !== false;
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!_adBypassEnabled) return;
+  if (changeInfo.title && /domain blocked/i.test(changeInfo.title)) {
+    chrome.tabs.remove(tabId).catch(() => {});
+  }
+});
+
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded'];
+  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'adLinkBypass'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 

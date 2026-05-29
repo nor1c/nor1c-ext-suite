@@ -39,7 +39,8 @@
         "content/context-listener.js",
         "content/image-blocker.js",
         "content/gif-blocker.js",
-        "content/video-controls.js"
+        "content/video-controls.js",
+        "content/ad-link-bypass.js"
       ],
       "css": ["content/image-viewer.css"],
       "run_at": "document_start",
