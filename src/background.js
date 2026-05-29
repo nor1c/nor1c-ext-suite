@@ -22,6 +22,7 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureMenus();
 });
 
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'copy-link-text') {
     chrome.tabs.sendMessage(tab.id, { type: 'copy-link-text', text: info.linkText }).catch(() => {});
