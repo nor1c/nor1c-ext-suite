@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Downloader</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        background: #ffffff;
+        color: #1a1a2e;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-size: 13px;
+        height: auto;
+      }
+
+      /* ── root ── */
+      .app-root {
+        background: #ffffff;
+        color: #1e3a5f;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .rel { --rel: 0.038vw; }
+
+      /* ── buttons base ── */
+      .button {
+        transition: 0.15s ease;
+        cursor: pointer;
+        user-select: none;
+        outline: none;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .button.disabled { pointer-events: none; opacity: 0.3; }
+
+      .primary-btn {
+        cursor: pointer;
+        box-sizing: border-box;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        transition: 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #3b82f6;
+        color: #fff;
+        padding: 6px 14px;
+        gap: 6px;
+      }
+      .primary-btn:hover { background: #2563eb; }
+      .primary-btn:active { background: #1d4ed8; }
+
+      .secondary-btn {
+        cursor: pointer;
+        box-sizing: border-box;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: 1px solid #e8f0fe;
+        transition: 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #1e3a5f;
+        padding: 6px 14px;
+        gap: 6px;
+      }
+      .secondary-btn:hover { background: #f8fbff; }
+
+      /* ── loader ── */
+      .loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 0;
+      }
+      .dot-flashing {
+        position: relative;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #3b82f6;
+        color: #3b82f6;
+        animation: dot-flashing 0.6s infinite linear alternate;
+        animation-delay: 0.3s;
+      }
+      .dot-flashing::before,
+      .dot-flashing::after {
+        content: "";
+        display: inline-block;
+        position: absolute;
+        top: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #3b82f6;
+        color: #3b82f6;
+      }
+      .dot-flashing::before {
+        left: -12px;
+        animation: dot-flashing 0.6s infinite alternate;
+        animation-delay: 0s;
+      }
+      .dot-flashing::after {
+        left: 12px;
+        animation: dot-flashing 0.6s infinite alternate;
+        animation-delay: 0.6s;
+      }
+      @keyframes dot-flashing {
+        0%   { opacity: 0.3; }
+        100% { opacity: 1; }
+      }
+
+      /* ── message (empty state) ── */
+      .message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 16px;
+        color: #94a3b8;
+      }
+      .message .pane {
+        background: transparent;
+        border: none;
+        text-align: center;
+        color: #94a3b8;
+      }
+      .message .pane p {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 500;
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      /* ── videos list ── */
+      .videos-list {
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 4px 0 0;
+        max-height: 280px;
+        overflow-y: auto;
+      }
+      .videos-list::-webkit-scrollbar { width: 4px; }
+      .videos-list::-webkit-scrollbar-track { background: transparent; }
+      .videos-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+      /* ── single video card ── */
+      .video {
+        background: #ffffff;
+        border: 1px solid #e8f0fe;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: border-color 0.15s;
+        margin: 0 8px;
+      }
+      .video:hover { border-color: #bfdbfe; }
+
+      /* ── preview ── */
+      .preview {
+        border-bottom: 1px solid #e8f0fe;
+        background: #f1f5f9;
+        overflow: hidden;
+      }
+      .preview video {
+        display: block;
+        width: 100%;
+        background: #f1f5f9;
+      }
+
+      /* ── video info row ── */
+      .video-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+      }
+
+      /* ── title ── */
+      .title {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        font-weight: 600;
+        color: #1e3a5f;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .quality {
+        font-size: 10px;
+        font-weight: 700;
+        color: #1e3a5f;
+        background: #eff6ff;
+        padding: 2px 8px;
+        border-radius: 10px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      /* ── video action buttons ── */
+      .video-info .button {
+        width: 26px;
+        height: 26px;
+        border: none;
+        border-radius: 6px;
+        background: #f1f5f9;
+        flex-shrink: 0;
+        padding: 0;
+      }
+      .video-info .button:hover { background: #e2e8f0; }
+      .video-info .button svg { width: 14px; height: 14px; }
+      .video-info .button svg path,
+      .video-info .button svg rect { fill: #64748b; }
+
+      .video-info .button.play-btn {
+        display: none;
+      }
+
+      .video-info .button.download-btn {
+        background: #3b82f6;
+      }
+      .video-info .button.download-btn:hover { background: #2563eb; }
+      .video-info .button.download-btn svg { width: 14px; height: 14px; }
+      .video-info .button.download-btn svg path,
+      .video-info .button.download-btn svg rect { fill: #fff; }
+
+      /* ── footer (hidden) ── */
+      .footer { display: none !important; }
+      .footer .controls { display: none !important; }
+
+      /* ── tool panel ── */
+      .app-tool-panel {
+        background: #ffffff;
+        color: #1e3a5f;
+      }
+
+      /* ── transitions ── */
+      .root-enter-active, .root-leave-active { transition: opacity 0.2s; }
+      .root-enter, .root-leave-to { opacity: 0; }
+      .slide-enter-active, .slide-leave-active { transition: all 0.25s ease; }
+      .slide-enter { transform: translateY(8px); opacity: 0; }
+      .slide-leave-to { transform: translateY(-8px); opacity: 0; }
+
+      /* ── tab title header ── */
+      .nor1c-tab-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        padding: 6px 10px 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="video-downloader-popup.js"></script>
+    <script>
+      window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'tab-title' || !e.data.title) return;
+        var root = document.querySelector('.app-root');
+        if (!root) return;
+        var existing = root.querySelector('.nor1c-tab-title');
+        if (existing) {
+          existing.textContent = e.data.title;
+          return;
+        }
+        var el = document.createElement('div');
+        el.className = 'nor1c-tab-title';
+        el.textContent = e.data.title;
+        root.insertBefore(el, root.firstChild);
+      });
+
+      (function() {
+        // Only filter out videos with no URL at all — keep "N/A" quality entries
+        // since many valid detections don't have resolution info
+        function isValidVideo(v) {
+          if (!v) return false;
+          var url = v.url || v.src || v.link || '';
+          if (!url) return false;
+          // skip blob: URLs — not downloadable
+          if (url.indexOf('blob:') === 0) return false;
+          return true;
+        }
+
+        function filterState(obj, key) {
+          if (!Array.isArray(obj[key])) return;
+          obj[key] = obj[key].filter(isValidVideo);
+        }
+
+        function deepFilter(state) {
+          if (!state || typeof state !== 'object') return;
+          for (var k in state) {
+            if (!state.hasOwnProperty(k)) continue;
+            var v = state[k];
+            if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object') {
+              var hasUrl = v[0].url || v[0].src || v[0].link;
+              if (hasUrl) {
+                filterState(state, k);
+              }
+            } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+              deepFilter(v);
+            }
+          }
+        }
+
+        function hookStore() {
+          var el = document.querySelector('#app');
+          if (!el || !el.__vue__ || !el.__vue__.$store) return setTimeout(hookStore, 100);
+          var store = el.__vue__.$store;
+          var origCommit = store.commit.bind(store);
+          store.commit = function() {
+            origCommit.apply(null, arguments);
+            deepFilter(store.state);
+          };
+          var origReplaceState = store.replaceState.bind(store);
+          store.replaceState = function(s) {
+            origReplaceState(s);
+            deepFilter(store.state);
+          };
+          deepFilter(store.state);
+        }
+
+        function filterDOM() {
+          var items = document.querySelectorAll('.videos-list .video');
+          items.forEach(function(v) {
+            // only remove if no download link at all
+            var btn = v.querySelector('.download-btn');
+            if (!btn || !btn.getAttribute('href')) {
+              // check if there's any link element with a URL
+              var links = v.querySelectorAll('a[href]');
+              var hasValidLink = false;
+              for (var i = 0; i < links.length; i++) {
+                var href = links[i].href;
+                if (href && href.indexOf('blob:') !== 0) {
+                  hasValidLink = true;
+                  break;
+                }
+              }
+            }
+          });
+        }
+
+        new MutationObserver(function() {
+          var el = document.querySelector('#app');
+          if (el && el.__vue__ && el.__vue__.$store) {
+            deepFilter(el.__vue__.$store.state);
+          }
+        }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+        hookStore();
+      })();
+    </script>
+  </body>
+</html>
