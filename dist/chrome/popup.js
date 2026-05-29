@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (videoDownloadOn) {
       section.style.display = '';
       frame.style.display = '';
-      frame.src = frame.src || 'video-downloader-popup.html';
+      if (!frame.src || frame.src === 'about:blank') frame.src = 'video-downloader-popup.html';
       startFrameResize(frame);
     } else {
       section.style.display = 'none';
