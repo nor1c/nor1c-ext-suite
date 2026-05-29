@@ -40,7 +40,8 @@
         "content/image-blocker.js",
         "content/gif-blocker.js",
         "content/video-controls.js",
-        "content/ad-link-bypass.js"
+        "content/ad-link-bypass.js",
+        "content/smooth-scroll.js"
       ],
       "css": ["content/image-viewer.css"],
       "run_at": "document_start",
