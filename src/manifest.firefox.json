@@ -41,7 +41,8 @@
         "content/gif-blocker.js",
         "content/video-controls.js",
         "content/ad-link-bypass.js",
-        "content/element-hider.js"
+        "content/element-hider.js",
+        "content/save-to-png.js"
       ],
       "css": ["content/image-viewer.css"],
       "run_at": "document_start",

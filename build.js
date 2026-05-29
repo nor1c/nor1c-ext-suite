@@ -16,7 +16,9 @@ const COPY_FILES = [
   'video-downloader-popup.html',
   'video-downloader-popup.js',
   'video-downloader-popup.css',
-  'watcher.js'
+  'watcher.js',
+  'convert-image.html',
+  'convert-image.js'
 ];
 
 const COPY_DIRS = [
