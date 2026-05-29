@@ -17,7 +17,8 @@ chrome.runtime.onInstalled.addListener(() => {
     videoControls: false,
     videoDownload: false,
     adLinkBypass: true,
-    videoControlsExcluded: []
+    videoControlsExcluded: [],
+    hiddenRules: {}
   });
 
   ensureMenus();
@@ -49,7 +50,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'adLinkBypass'];
+  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'adLinkBypass', 'hiddenRules'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 

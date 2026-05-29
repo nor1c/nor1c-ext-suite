@@ -122,6 +122,101 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const videoDownloadOn = document.getElementById('video-download-toggle').checked;
   updateVideoDownloaderFrame(videoDownloadOn);
+
+  const pickBtn = document.getElementById('pick-element-btn');
+  pickBtn.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) return;
+    chrome.tabs.sendMessage(tab.id, { type: 'start-element-picker' }).catch(() => {});
+    window.close();
+  });
+
+  const hiddenSection = document.getElementById('hidden-elements-section');
+  const hiddenList = document.getElementById('hidden-elements-list');
+  const hiddenCount = document.getElementById('hidden-count');
+  const hiddenEmpty = document.getElementById('hidden-elements-empty');
+  const unhideAllBtn = document.getElementById('unhide-all-btn');
+
+  let hiddenDomain = null;
+
+  function renderHiddenList(rules) {
+    hiddenList.innerHTML = '';
+    const domainRules = rules[hiddenDomain] || [];
+    hiddenCount.textContent = domainRules.length;
+    if (domainRules.length === 0) {
+      hiddenSection.style.display = '';
+      hiddenList.style.display = 'none';
+      hiddenEmpty.style.display = '';
+      unhideAllBtn.style.display = 'none';
+      return;
+    }
+    hiddenSection.style.display = '';
+    hiddenList.style.display = '';
+    hiddenEmpty.style.display = 'none';
+    unhideAllBtn.style.display = '';
+    for (const rule of domainRules) {
+      const item = document.createElement('div');
+      item.className = 'hidden-element-item';
+      const path = document.createElement('span');
+      path.className = 'hidden-element-path';
+      const shortPath = rule.selector.split(' > ').slice(-3).join(' > ');
+      path.textContent = shortPath;
+      path.title = rule.selector;
+      const hint = document.createElement('span');
+      hint.className = 'hidden-element-hint';
+      hint.textContent = rule.contentHint || '';
+      hint.title = rule.contentHint || '';
+      const btn = document.createElement('button');
+      btn.className = 'hidden-element-unhide';
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      btn.title = 'Unhide';
+      btn.addEventListener('click', () => removeRule(rule.id));
+      item.appendChild(path);
+      if (rule.contentHint) item.appendChild(hint);
+      item.appendChild(btn);
+      hiddenList.appendChild(item);
+    }
+  }
+
+  async function removeRule(ruleId) {
+    const result = await chrome.storage.sync.get(['hiddenRules']);
+    const rules = result.hiddenRules || {};
+    const domainRules = rules[hiddenDomain] || [];
+    const filtered = domainRules.filter(r => r.id !== ruleId);
+    if (filtered.length === 0) delete rules[hiddenDomain];
+    else rules[hiddenDomain] = filtered;
+    await chrome.storage.sync.set({ hiddenRules: rules });
+    loadHiddenElements();
+  }
+
+  async function loadHiddenElements() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url) { hiddenSection.style.display = 'none'; return; }
+    try {
+      const hostname = new URL(tab.url).hostname;
+      const parts = hostname.split('.');
+      hiddenDomain = parts.length <= 2 ? hostname : parts.slice(-2).join('.');
+    } catch (_) { hiddenSection.style.display = 'none'; return; }
+    const result = await chrome.storage.sync.get(['hiddenRules']);
+    const rules = result.hiddenRules || {};
+    renderHiddenList(rules);
+  }
+
+  unhideAllBtn.addEventListener('click', async () => {
+    const result = await chrome.storage.sync.get(['hiddenRules']);
+    const rules = result.hiddenRules || {};
+    delete rules[hiddenDomain];
+    await chrome.storage.sync.set({ hiddenRules: rules });
+    loadHiddenElements();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.hiddenRules) {
+      loadHiddenElements();
+    }
+  });
+
+  await loadHiddenElements();
 });
 
 function toKebab(camel) {

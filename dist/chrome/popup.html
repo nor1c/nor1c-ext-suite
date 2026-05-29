@@ -101,8 +101,28 @@
       style="width:100%; height:0; border:none; border-radius:0 0 8px 8px; display:block;"></iframe>
   </div>
 
+  <div class="picker-section">
+    <button id="pick-element-btn" class="pick-element-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      Pick Element to Hide
+    </button>
+  </div>
+
+  <div id="hidden-elements-section" class="hidden-elements-section" style="display: none;">
+    <div class="hidden-elements-header">
+      <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
+      <button id="unhide-all-btn" class="hidden-elements-clear">Unhide All</button>
+    </div>
+    <div id="hidden-elements-list" class="hidden-elements-list"></div>
+    <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
+  </div>
+
   <footer class="footer">
-    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer</span>
+    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer · Element Hider</span>
   </footer>
 
   <script src="popup.js"></script>
