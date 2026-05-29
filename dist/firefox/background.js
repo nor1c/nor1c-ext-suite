@@ -18,7 +18,8 @@ chrome.runtime.onInstalled.addListener(() => {
     videoDownload: false,
     adLinkBypass: true,
     videoControlsExcluded: [],
-    hiddenRules: {}
+    hiddenRules: {},
+    elementHider: true
   });
 
   ensureMenus();
@@ -50,11 +51,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'adLinkBypass', 'hiddenRules'];
+  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'adLinkBypass', 'hiddenRules', 'elementHider'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 
-  const tabs = await chrome.tabs.query({});
+  // Only query http/https tabs — skip chrome://, edge://, about:, etc.
+  // These can't receive content script messages anyway.
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   for (const tab of tabs) {
     if (!tab.id) continue;
     try {

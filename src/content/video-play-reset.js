@@ -81,14 +81,15 @@
     });
     observer.observe(video, { attributes: true, attributeFilter: ['src'] });
 
-    // also watch <source> children
+    // Watch <source> children — only direct childList, no subtree
+    // to avoid firing on every descendant mutation
     if (video.parentElement) {
       var parentObserver = new MutationObserver(function () {
         if (!video.paused) {
           reportVideoSrc(video);
         }
       });
-      parentObserver.observe(video.parentElement, { childList: true, subtree: true });
+      parentObserver.observe(video.parentElement, { childList: true });
     }
   }
 
@@ -110,9 +111,15 @@
     scanAllVideos();
   }
 
-  // Watch for dynamically added video elements
+  // Watch for dynamically added video elements — debounced to avoid
+  // firing scanForVideos on every single DOM mutation
+  var scanDebounceTimer = null;
   var bodyObserver = new MutationObserver(function () {
-    scanForVideos();
+    if (scanDebounceTimer) return;
+    scanDebounceTimer = setTimeout(function () {
+      scanDebounceTimer = null;
+      scanForVideos();
+    }, 500);
   });
 
   function attachBodyObserver() {
@@ -127,6 +134,33 @@
     document.addEventListener('DOMContentLoaded', attachBodyObserver);
   }
 
-  // Periodic scan: every 2s, check if any video is playing and not yet reported
-  setInterval(scanAllVideos, 2000);
+  // Periodic scan: every 3s, check if any video is playing and not yet reported.
+  // Only runs while there are video elements on the page.
+  var scanInterval = null;
+
+  function ensureScanInterval() {
+    if (scanInterval) return;
+    scanInterval = setInterval(function () {
+      var videos = document.querySelectorAll('video');
+      if (videos.length === 0) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+        return;
+      }
+      scanAllVideos();
+    }, 3000);
+  }
+
+  // Start interval if videos exist now, or after first scan finds them
+  if (document.querySelectorAll('video').length > 0) {
+    ensureScanInterval();
+  }
+  // Also check after DOMContentLoaded
+  var _origScanForVideos = scanForVideos;
+  scanForVideos = function () {
+    _origScanForVideos();
+    if (document.querySelectorAll('video').length > 0) {
+      ensureScanInterval();
+    }
+  };
 })();

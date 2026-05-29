@@ -10,11 +10,6 @@
   <title>Nor1c Suite</title>
 </head>
 <body>
-  <header class="header">
-    <h1 class="title">Nor1c Suite</h1>
-    <span class="version">v1.0.0</span>
-  </header>
-
   <div class="toggles">
     <div class="toggle-section">
       <div class="toggle-card">
@@ -98,10 +93,21 @@
           <span class="slider"></span>
         </label>
       </div>
+
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Element Hider</div>
+          <div class="toggle-desc">Hide elements you've picked on each site</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="element-hider-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
     </div>
   </div>
 
-  <div class="picker-section">
+  <div class="picker-section" id="picker-section">
     <button id="pick-element-btn" class="pick-element-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
@@ -122,7 +128,7 @@
   </div>
 
   <footer class="footer">
-    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer · Element Hider</span>
+    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer</span>
   </footer>
 
   <script src="popup.js"></script>

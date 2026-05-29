@@ -13,30 +13,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.header {
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #e8f0fe;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e3a5f;
-  letter-spacing: -0.3px;
-}
-
-.version {
-  font-size: 11px;
-  font-weight: 500;
-  color: #93c5fd;
-  background: #eff6ff;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
 .toggles {
   padding: 4px 0;
 }
@@ -498,6 +474,20 @@ input:focus-visible + .slider {
 
 .hidden-element-item:hover {
   border-color: #bfdbfe;
+}
+
+.hidden-element-url-path {
+  font-size: 10px;
+  font-weight: 600;
+  color: #3b82f6;
+  background: #eff6ff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hidden-element-path {

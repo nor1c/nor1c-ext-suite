@@ -259,18 +259,15 @@
     else remove();
   }
 
-  injectCSS();
-  startObserver();
-
+  // Defer observer + CSS until storage confirms feature is enabled
+  // This avoids wasting CPU on pages where image blocker is off
   chrome.storage.sync.get(['imageBlocker'], (result) => {
     var val = result.imageBlocker === true;
-    if (!val) {
-      removeCSS();
-      stopObserver();
-    }
     active = val;
-    if (active && document.body) {
-      scanElement(document.body);
+    if (active) {
+      injectCSS();
+      startObserver();
+      if (document.body) scanElement(document.body);
     }
   });
 

@@ -267,18 +267,16 @@
   }
 
   // =============================================================
-  // Init: block first, ask later
+  // Init: defer observer + CSS until storage confirms feature is on
   // =============================================================
-  injectCSS();
-  startObserver();
-
   chrome.storage.sync.get(['gifBlocker'], (result) => {
     const val = result.gifBlocker === true;
-    if (!val) {
-      removeCSS();
-      stopObserver();
-    }
     active = val;
+    if (active) {
+      injectCSS();
+      startObserver();
+      hideImages(document.documentElement);
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {

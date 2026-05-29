@@ -10,6 +10,44 @@
   let lastHovered = null;
   let iframeOverride = null;
 
+  // Cached rules for current domain — avoids chrome.storage.sync.get on every mutation
+  let cachedDomainRules = null;
+  let rulesLoaded = false;
+  let debounceTimer = null;
+  let elementHiderEnabled = true;
+  let hideStyleEl = null;
+
+  function ensureHideStyle() {
+    if (hideStyleEl) return hideStyleEl;
+    hideStyleEl = document.createElement('style');
+    hideStyleEl.id = 'nor1c-eh-rules';
+    (document.head || document.documentElement).appendChild(hideStyleEl);
+    return hideStyleEl;
+  }
+
+  function rebuildHideCss() {
+    const el = ensureHideStyle();
+    if (!elementHiderEnabled || !cachedDomainRules || cachedDomainRules.length === 0) {
+      el.textContent = '';
+      return;
+    }
+    const selectors = cachedDomainRules.map(r => r.selector).join(',\n');
+    el.textContent = selectors + ' { display: none !important; }';
+  }
+
+  function loadRules(callback) {
+    chrome.storage.sync.get(['hiddenRules', 'elementHider'], result => {
+      elementHiderEnabled = result.elementHider !== false;
+      const rules = result.hiddenRules || {};
+      const domain = getDomain();
+      const path = getPathname();
+      const domainRules = rules[domain] || [];
+      cachedDomainRules = domainRules.filter(r => pathsMatch(r.path, path));
+      rulesLoaded = true;
+      if (callback) callback();
+    });
+  }
+
   function uuid() {
     return 'xxxxxxxx-xxxx-4xxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16));
   }
@@ -81,6 +119,15 @@
     const parts = location.hostname.split('.');
     if (parts.length <= 2) return location.hostname;
     return parts.slice(-2).join('.');
+  }
+
+  function getPathname() {
+    return location.pathname.replace(/\/+$/, '') || '/';
+  }
+
+  function pathsMatch(rulePath, currentPath) {
+    if (!rulePath) return true;
+    return currentPath === rulePath || currentPath.startsWith(rulePath + '/');
   }
 
   function injectPickerStyles() {
@@ -197,7 +244,7 @@
     const selector = buildStructuralSelector(el);
     const contentHint = buildContentHint(el);
     const domain = getDomain();
-    const rule = { id: uuid(), selector, contentHint, createdAt: Date.now() };
+    const rule = { id: uuid(), selector, contentHint, path: getPathname(), createdAt: Date.now() };
 
     chrome.storage.sync.get(['hiddenRules'], result => {
       const rules = result.hiddenRules || {};
@@ -227,7 +274,7 @@
   }
 
   function enterPicker() {
-    if (pickerActive) return;
+    if (pickerActive || !elementHiderEnabled) return;
     pickerActive = true;
     injectPickerStyles();
     document.addEventListener('mouseover', onPickerMouseOver, true);
@@ -247,28 +294,31 @@
   }
 
   function applyRules() {
-    chrome.storage.sync.get(['hiddenRules'], result => {
-      const rules = result.hiddenRules || {};
-      const domain = getDomain();
-      const domainRules = rules[domain];
-      if (!domainRules || domainRules.length === 0) return;
-      for (const rule of domainRules) {
-        applySingleRule(rule);
-      }
-    });
+    if (!rulesLoaded) {
+      loadRules(() => applyRules());
+      return;
+    }
+    rebuildHideCss();
+  }
+
+  function unhideAllRules() {
+    if (hideStyleEl) hideStyleEl.textContent = '';
+    // Also remove any legacy inline styles
+    if (!cachedDomainRules || cachedDomainRules.length === 0) return;
+    for (const rule of cachedDomainRules) {
+      let el = document.querySelector(rule.selector);
+      if (!el && rule.contentHint) el = fuzzyMatch(rule);
+      if (el) el.style.removeProperty('display');
+    }
   }
 
   function applySingleRule(rule) {
+    // CSS handles exact selectors; fuzzy match as fallback via inline style
     let el = document.querySelector(rule.selector);
-    if (el) {
-      el.style.setProperty('display', 'none', 'important');
-      return;
-    }
+    if (el) return; // already handled by CSS
     if (rule.contentHint) {
       el = fuzzyMatch(rule);
-      if (el) {
-        el.style.setProperty('display', 'none', 'important');
-      }
+      if (el) el.style.setProperty('display', 'none', 'important');
     }
   }
 
@@ -284,21 +334,64 @@
     return null;
   }
 
+  let lastUrl = location.href;
+
+  function onUrlChange() {
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    // Clear old CSS rules first
+    if (hideStyleEl) hideStyleEl.textContent = '';
+    // Reset cache and reload rules for new path
+    rulesLoaded = false;
+    cachedDomainRules = null;
+    loadRules(() => {
+      rebuildHideCss();
+      // Also run fuzzy match fallback for rules CSS selectors didn't catch
+      if (cachedDomainRules) {
+        for (const rule of cachedDomainRules) applySingleRule(rule);
+      }
+    });
+  }
+
+  // Intercept SPA navigation
+  const origPushState = history.pushState;
+  history.pushState = function() {
+    origPushState.apply(this, arguments);
+    onUrlChange();
+  };
+  const origReplaceState = history.replaceState;
+  history.replaceState = function() {
+    origReplaceState.apply(this, arguments);
+    onUrlChange();
+  };
+  window.addEventListener('popstate', onUrlChange);
+
   function observeForNewRules() {
     const observer = new MutationObserver(() => {
-      applyRules();
+      // Debounce: batch rapid mutations into a single fuzzy-match pass
+      if (debounceTimer) return;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        // CSS handles exact selectors; only do fuzzy match fallback here
+        if (!elementHiderEnabled || !cachedDomainRules || cachedDomainRules.length === 0) return;
+        for (const rule of cachedDomainRules) applySingleRule(rule);
+      }, 300);
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+      loadRules(() => {
+        applyRules();
+        observeForNewRules();
+      });
+    });
+  } else {
+    loadRules(() => {
       applyRules();
       observeForNewRules();
     });
-  } else {
-    applyRules();
-    observeForNewRules();
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -306,7 +399,16 @@
       enterPicker();
       sendResponse({ ok: true });
     } else if (msg.type === 'hiddenRules-changed') {
-      applyRules();
+      // Reload cache from storage, then re-apply
+      loadRules(() => applyRules());
+    } else if (msg.type === 'toggle-changed' && msg.key === 'elementHider') {
+      elementHiderEnabled = msg.value !== false;
+      if (elementHiderEnabled) {
+        applyRules();
+      } else {
+        exitPicker();
+        unhideAllRules();
+      }
     }
   });
 })();

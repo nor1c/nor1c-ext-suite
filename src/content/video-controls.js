@@ -134,6 +134,10 @@
     }
   }
 
+  // Cache for liftSoundButton — avoid repeated getComputedStyle walks
+  // when the button hasn't moved in the DOM
+  const liftDone = new WeakSet();
+
   function forceControls(video) {
     if (!video || video.tagName !== 'VIDEO') return;
 
@@ -311,11 +315,16 @@
           if (v.volume !== saved.volume) v.volume = saved.volume;
         }
         disableOverlays(v);
-        liftSoundButton(v);
+        // Only walk DOM for liftSoundButton once per video —
+        // the z-index/position styles persist, no need to re-apply
+        if (!liftDone.has(v)) {
+          liftSoundButton(v);
+          liftDone.add(v);
+        }
       });
 
-      document.querySelectorAll('[aria-label="Video player"]').forEach(nukeOverlay);
-      document.querySelectorAll('[role="group"][data-visualcompletion="ignore"]').forEach(nukeOverlay);
+      // Single combined selector instead of two separate querySelectorAll
+      document.querySelectorAll('[aria-label="Video player"],[role="group"][data-visualcompletion="ignore"]').forEach(nukeOverlay);
     }, 4000);
   }
 

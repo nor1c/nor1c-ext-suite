@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false };
+  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider'];
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false, elementHider: true };
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await chrome.storage.sync.set({ [key]: e.target.checked });
       if (key === 'videoControls') updateSiteExcludeVisibility(e.target.checked);
       if (key === 'videoDownload') updateVideoDownloaderFrame(e.target.checked);
+      if (key === 'elementHider') updateElementHiderVisibility(e.target.checked);
     });
   }
 
@@ -65,6 +66,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function stopFrameResize() {
     if (frameResizeTimer) { clearInterval(frameResizeTimer); frameResizeTimer = null; }
+  }
+
+  function updateElementHiderVisibility(on) {
+    document.getElementById('picker-section').style.display = on ? '' : 'none';
+    hiddenSection.style.display = on ? '' : 'none';
   }
 
   async function loadSiteExclude() {
@@ -138,12 +144,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   const unhideAllBtn = document.getElementById('unhide-all-btn');
 
   let hiddenDomain = null;
+  let currentPath = null;
+
+  function pathsMatch(rulePath, path) {
+    if (!rulePath) return true;
+    return path === rulePath || path.startsWith(rulePath + '/');
+  }
 
   function renderHiddenList(rules) {
     hiddenList.innerHTML = '';
     const domainRules = rules[hiddenDomain] || [];
-    hiddenCount.textContent = domainRules.length;
-    if (domainRules.length === 0) {
+    const visibleRules = domainRules.filter(r => pathsMatch(r.path, currentPath));
+    hiddenCount.textContent = visibleRules.length;
+    if (visibleRules.length === 0) {
       hiddenSection.style.display = '';
       hiddenList.style.display = 'none';
       hiddenEmpty.style.display = '';
@@ -154,9 +167,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     hiddenList.style.display = '';
     hiddenEmpty.style.display = 'none';
     unhideAllBtn.style.display = '';
-    for (const rule of domainRules) {
+    for (const rule of visibleRules) {
       const item = document.createElement('div');
       item.className = 'hidden-element-item';
+      const urlPath = document.createElement('span');
+      urlPath.className = 'hidden-element-url-path';
+      urlPath.textContent = rule.path || 'all pages';
       const path = document.createElement('span');
       path.className = 'hidden-element-path';
       const shortPath = rule.selector.split(' > ').slice(-3).join(' > ');
@@ -171,6 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
       btn.title = 'Unhide';
       btn.addEventListener('click', () => removeRule(rule.id));
+      item.appendChild(urlPath);
       item.appendChild(path);
       if (rule.contentHint) item.appendChild(hint);
       item.appendChild(btn);
@@ -193,9 +210,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.url) { hiddenSection.style.display = 'none'; return; }
     try {
-      const hostname = new URL(tab.url).hostname;
+      const url = new URL(tab.url);
+      const hostname = url.hostname;
       const parts = hostname.split('.');
       hiddenDomain = parts.length <= 2 ? hostname : parts.slice(-2).join('.');
+      currentPath = url.pathname.replace(/\/+$/, '') || '/';
     } catch (_) { hiddenSection.style.display = 'none'; return; }
     const result = await chrome.storage.sync.get(['hiddenRules']);
     const rules = result.hiddenRules || {};
@@ -205,7 +224,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   unhideAllBtn.addEventListener('click', async () => {
     const result = await chrome.storage.sync.get(['hiddenRules']);
     const rules = result.hiddenRules || {};
-    delete rules[hiddenDomain];
+    const domainRules = rules[hiddenDomain] || [];
+    const remaining = domainRules.filter(r => r.path && r.path !== currentPath);
+    if (remaining.length === 0) delete rules[hiddenDomain];
+    else rules[hiddenDomain] = remaining;
     await chrome.storage.sync.set({ hiddenRules: rules });
     loadHiddenElements();
   });
@@ -215,6 +237,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       loadHiddenElements();
     }
   });
+
+  const elementHiderOn = document.getElementById('element-hider-toggle').checked;
+  updateElementHiderVisibility(elementHiderOn);
 
   await loadHiddenElements();
 });
