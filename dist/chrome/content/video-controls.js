@@ -32,8 +32,7 @@
     video[nor1c]::-webkit-media-controls-auto-play-button,
     video[nor1c]::-webkit-media-controls-start-playback-button,
     video[nor1c]::-webkit-media-controls-overlay-play-button { display: none !important; }
-    video[nor1c]::-webkit-media-controls-panel { margin-bottom: 40px !important; }
-    video[nor1c] { padding-bottom: 40px !important; object-fit: contain !important; }
+    video[nor1c] { object-fit: contain !important; }
   `;
   if (document.head || document.documentElement) {
     (document.head || document.documentElement).appendChild(styleEl);
