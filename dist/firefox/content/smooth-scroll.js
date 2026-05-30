@@ -55,7 +55,7 @@
 
   function scrollTo(y) {
     if (scrollTarget) scrollTarget.scrollTop = y;
-    else window.scrollTo(window.scrollX, y);
+    else window.scrollTo({ left: window.scrollX, top: y, behavior: 'instant' });
   }
 
   function tick(now) {
