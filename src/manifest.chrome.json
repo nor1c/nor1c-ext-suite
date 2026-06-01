@@ -1,4 +1,4 @@
-﻿{
+{
     "manifest_version":  3,
     "name":  "Nor1c Suite",
     "version":  "1.0.0",
@@ -15,7 +15,7 @@
                         "offscreen"
                     ],
     "host_permissions":  [
-                             "\u003call_urls\u003e"
+                             "<all_urls>"
                          ],
     "background":  {
                        "service_worker":  "background.js"
@@ -32,10 +32,20 @@
     "content_scripts":  [
                             {
                                 "matches":  [
-                                                "\u003call_urls\u003e"
+                                                "<all_urls>"
                                             ],
                                 "js":  [
-                                           "content/right-click.js",
+                                           "content/right-click.js"
+                                       ],
+                                "run_at":  "document_start",
+                                "all_frames":  true,
+                                "world":  "MAIN"
+                            },
+                            {
+                                "matches":  [
+                                                "<all_urls>"
+                                            ],
+                                "js":  [
                                            "content/context-listener.js",
                                            "content/image-blocker.js",
                                            "content/gif-blocker.js",
@@ -62,13 +72,13 @@
                                            "content/video-downloader-inject.js"
                                        ],
                                 "matches":  [
-                                                "\u003call_urls\u003e"
+                                                "<all_urls>"
                                             ],
                                 "run_at":  "document_start"
                             },
                             {
                                 "matches":  [
-                                                "\u003call_urls\u003e"
+                                                "<all_urls>"
                                             ],
                                 "js":  [
                                            "content/image-viewer.js"
@@ -86,7 +96,7 @@
                                                            "watcher.js"
                                                        ],
                                          "matches":  [
-                                                         "\u003call_urls\u003e"
+                                                         "<all_urls>"
                                                      ]
                                      }
                                  ],

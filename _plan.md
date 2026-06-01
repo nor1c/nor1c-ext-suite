@@ -1,60 +1,68 @@
-﻿# Plan: Fix Smooth Scrolling
+﻿# Right-Click Blocker Investigation
 
-## Goal
-Smooth scrolling toggle in the popup does nothing because smooth-scroll.js is never injected into any page. The toggle exists in the UI and the script exists on disk but the extension never loads it.
+## Findings
+These things caused unable to right click on right click blocked site even though the extension is running.
 
-## Constraints
-- Must work in both Chrome and Firefox (both manifests).
-- Toggle must take effect without page reload.
-- Must not break existing content scripts.
-- Follow all AGENTS.md rules (no secrets, no var, etc.).
+### 1. Primary Blocker — Line 76-77
 
-## Root Causes Identified
+```javascript
+function mousedwn(e){
+  try{
+    if(event.button==2||event.button==3)return false
+  }catch(e){
+    if(e.which==3)return false
+  }
+}
+document.oncontextmenu=function(){return false};
+document.ondragstart=function(){return false};
+document.onmousedown=mousedwn
+```
 
-| # | Issue | File(s) |
-|---|-------|---------|
-| 1 | smooth-scroll.js not listed in any content_scripts entry | manifest.chrome.json, manifest.firefox.json |
-| 2 | Background doesn't broadcast smoothScroll toggle changes to tabs | ackground.js (	oggleKeys array) |
-| 3 | Background doesn't set smoothScroll: false default on install | ackground.js (onInstalled handler) |
+**What it does:**
+- `document.oncontextmenu` — intercepts right-click context menu
+- `document.onmousedown` — blocks right/middle mouse buttons (button 2 & 3)
+- `document.ondragstart` — blocks drag operations
 
-## Step-by-Step Steps
+### 2. Keyboard Shortcut Blocker — Line 77 (end)
 
-### Step 1 — Register script in Chrome manifest
-File: src/manifest.chrome.json
-- Add "content/smooth-scroll.js" to the first content_scripts group's js array.
-- This group runs at document_start with ll_frames: true, matching <all_urls>.
+```javascript
+window.addEventListener("keydown",function(e){
+  if(e.ctrlKey&&(e.which==65||e.which==66||e.which==67||e.which==73||e.which==80||e.which==83||e.which==85||e.which==86)){
+    e.preventDefault()
+  }
+});
+document.keypress=function(e){
+  if(e.ctrlKey&&(e.which==65||e.which==66||e.which==67||e.which==73||e.which==80||e.which==83||e.which==85||e.which==86)){}
+  return false
+}
+```
 
-### Step 2 — Register script in Firefox manifest
-File: src/manifest.firefox.json
-- Same addition as Step 1.
+**What it does:** Blocks Ctrl+A, B, C, I, P, S, U, V (select all, bold, copy, inspect, print, save, view source, paste)
 
-### Step 3 — Add smoothScroll to background broadcast list
-File: src/background.js
-- Insert 'smoothScroll' into the 	oggleKeys array so the background forwards toggle changes to all tabs.
+### 3. DevTools Blocker — Line 77 (end)
 
-### Step 4 — Add smoothScroll to install defaults
-File: src/background.js
-- Insert smoothScroll: false into the chrome.runtime.onInstalled storage.set call so the key is always defined.
+```javascript
+document.onkeydown=function(e){
+  e=e||window.event;
+  if(e.keyCode==123||e.keyCode==18){return false}
+}
+```
 
-## Files Touched
+**What it does:** Blocks F12 (devtools) and Alt key
 
-| File | Change |
-|------|--------|
-| src/manifest.chrome.json | Added "content/smooth-scroll.js" to content_scripts[0].js |
-| src/manifest.firefox.json | Added "content/smooth-scroll.js" to content_scripts[0].js |
-| src/background.js | Added smoothScroll: false to onInstalled defaults + 'smoothScroll' to toggleKeys |
+### 4. CSS-based Text Selection Blocker — Line 77
 
-## Expected Behavior
+```css
+*:(input,textarea){-webkit-touch-callout:none;-webkit-user-select:none}
+img{-webkit-touch-callout:none;-webkit-user-select:none}
+```
 
-1. After extension reload, smooth-scroll.js runs on every page at document_start.
-2. Toggling "Smooth Scroll" in the popup writes to chrome.storage.sync → script listens via chrome.storage.onChanged and applies/removes its wheel and keydown handlers.
-3. Script adds html { scroll-behavior: smooth !important; } CSS when active.
-4. On disable, all listeners and injected style are removed.
+### 5. Iframe Context Menu Blocker — Line 82 (end)
 
-## Acceptance Criteria
+```javascript
+$('iframe').on('contextmenu', function(e){e.preventDefault();});
+```
 
-- [ ] smooth-scroll.js is listed in content_scripts[0].js in both manifests.
-- [ ] smoothScroll key appears in 	oggleKeys and onInstalled defaults in ackground.js.
-- [ ] After rebuild and reload, enabling smooth scroll toggle adds smooth scrolling to pages.
-- [ ] Disabling toggle removes smooth scrolling immediately.
-- [ ] No console errors from the content script.
+## Summary
+
+All blockers are inline scripts/styles injected directly into the HTML page. To unblock right-click, need to neutralize all 5 mechanisms listed above.
