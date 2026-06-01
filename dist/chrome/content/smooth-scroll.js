@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const STYLE_ID = 'nor1c-smooth-scroll-style';
   const CSS = 'html { scroll-behavior: smooth !important; }';
 
@@ -7,10 +7,11 @@
   let velocity = 0;
   let rafId = null;
   let lastTime = 0;
-  let scrollTarget = null; // null = window, or an element
+  let scrollTarget = null;
   let currentDecay = 0.90;
   const MIN_VEL = 0.3;
   const scrollableCache = new WeakMap();
+  var hasPlayingVideo = false;
 
   function isScrollable(node) {
     if (scrollableCache.has(node)) return true;
@@ -85,13 +86,22 @@
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
   }
 
+  function isMediaTarget(el) {
+    var tag = el.tagName || '';
+    if (tag === 'VIDEO' || tag === 'AUDIO') return true;
+    if (el.closest && el.closest('video, audio, [role="application"]')) return true;
+    return false;
+  }
+
   function handleScroll(e, delta) {
     if (!active) return false;
     if (isInputTarget(e.target)) return false;
+    if (isMediaTarget(e.target)) return false;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return false;
 
     var ancestor = findScrollableAncestor(e.target);
-    if (ancestor && !isPageScroller(ancestor)) return false; // modal — let native handle
-    scrollTarget = ancestor || null; // null = window
+    if (ancestor && !isPageScroller(ancestor)) return false;
+    scrollTarget = ancestor || null;
 
     var maxScroll = getMaxScroll();
     if (maxScroll <= 0) return false;
@@ -127,10 +137,54 @@
     else if (e.key === 'PageUp') delta = -window.innerHeight * 0.85;
     else if (e.key === 'ArrowDown') delta = 50;
     else if (e.key === 'ArrowUp') delta = -50;
-    else if (e.key === ' ') delta = e.shiftKey ? -window.innerHeight * 0.85 : window.innerHeight * 0.85;
+    else if (e.key === ' ') {
+      if (hasPlayingVideo) return;
+      delta = e.shiftKey ? -window.innerHeight * 0.85 : window.innerHeight * 0.85;
+    }
     else return;
 
     if (handleScroll(e, delta)) e.preventDefault();
+  }
+
+  function setupVideoTracking() {
+    function findVideoInPath(e) {
+      var path = e.composedPath ? e.composedPath() : [e.target];
+      for (var i = 0; i < path.length; i++) {
+        if (path[i] && path[i].tagName === 'VIDEO') return path[i];
+      }
+      return null;
+    }
+
+    document.addEventListener('playing', function (e) {
+      var v = findVideoInPath(e);
+      if (v && !v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
+        hasPlayingVideo = true;
+      }
+    }, true);
+
+    document.addEventListener('ended', function (e) {
+      if (findVideoInPath(e)) hasPlayingVideo = false;
+    }, true);
+
+    document.addEventListener('emptied', function (e) {
+      if (findVideoInPath(e)) hasPlayingVideo = false;
+    }, true);
+
+    function walk(root) {
+      var videos = root.querySelectorAll('video');
+      for (var i = 0; i < videos.length; i++) {
+        var v = videos[i];
+        if (!v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
+          hasPlayingVideo = true;
+          return;
+        }
+      }
+      var all = root.querySelectorAll('*');
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].shadowRoot && !hasPlayingVideo) walk(all[i].shadowRoot);
+      }
+    }
+    walk(document);
   }
 
   function injectCSS() {
@@ -166,6 +220,8 @@
     active = val;
     if (active) apply(); else remove();
   }
+
+  setupVideoTracking();
 
   chrome.storage.sync.get(['smoothScroll'], (result) => {
     var val = result.smoothScroll === true;
