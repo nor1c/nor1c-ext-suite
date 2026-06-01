@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -96,24 +96,6 @@
           <span class="slider"></span>
         </label>
       </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Class Blocker</div>
-          <div class="toggle-desc">Block elements by class or ID name</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="class-blocker-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
-        <div class="blocker-input-wrap">
-          <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="3" spellcheck="false"></textarea>
-          <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
-        </div>
-      </div>
-    </div>
-  </div>
   <div class="picker-section" id="picker-section">
     <button id="pick-element-btn" class="pick-element-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -132,8 +114,34 @@
     <div id="hidden-elements-list" class="hidden-elements-list"></div>
     <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
   </div>
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Class Blocker</div>
+          <div class="toggle-desc">Block elements by class or ID name</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="class-blocker-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
+        <div class="blocker-input-wrap">
+          <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="3" spellcheck="false"></textarea>
+          <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="backup-section">
+    <div class="backup-header">Settings Management</div>
+    <div class="backup-body">
+      <button id="export-btn" class="backup-btn" title="Export settings to a JSON file">Export</button>
+      <button id="import-btn" class="backup-btn" title="Import settings from a JSON file">Import</button>
+      <input type="file" id="import-file" accept=".json" style="display:none">
+    </div>
+  </div>
   <footer class="footer">
-    <span class="footer-text">Always active: Force Right-Click Copy Link Text Image Viewer</span>
+    <span class="footer-text">Always active: Copy Link Text Image Viewer</span>
   </footer>
   <script src="popup.js"></script>
 </body>

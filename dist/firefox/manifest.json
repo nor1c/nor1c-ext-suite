@@ -2,7 +2,7 @@
     "manifest_version":  3,
     "name":  "Nor1c Suite",
     "version":  "1.0.0",
-    "description":  "Multi-function browser extension: force right-click, copy link text, image viewer, image/GIF blocker, video controls, video download.",
+    "description":  "Multi-function browser extension: copy link text, image viewer, image/GIF blocker, video controls, video download.",
     "permissions":  [
                         "contextMenus",
                         "storage",
@@ -36,18 +36,7 @@
                                     }
                },
     "content_scripts":  [
-                            {
-                                "matches":  [
-                                                "\u003call_urls\u003e"
-                                            ],
-                                "js":  [
-                                           "content/right-click.js"
-                                       ],
-                                "run_at":  "document_start",
-                                "all_frames":  true,
-                                "world":  "MAIN"
-                            },
-                            {
+                                                       {
                                 "matches":  [
                                                 "\u003call_urls\u003e"
                                             ],
