@@ -1,4 +1,4 @@
-﻿try { importScripts('background-video-downloader.js'); } catch (_) {}
+try { importScripts('background-video-downloader.js'); } catch (_) {}
 
 let menusSetup = false;
 async function ensureMenus() {
@@ -13,6 +13,8 @@ ensureMenus();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.set({
+    classBlocker: false,
+    blockedSelectors: '',
     imageBlocker: false,
     gifBlocker: false,
     videoControls: false,
@@ -26,7 +28,6 @@ chrome.runtime.onInstalled.addListener(() => {
 
   ensureMenus();
 });
-
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'copy-link-text') {
@@ -120,12 +121,10 @@ async function saveImageAsPng(srcUrl, tab) {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider'];
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 
-  // Only query http/https tabs — skip chrome://, edge://, about:, etc.
-  // These can't receive content script messages anyway.
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   for (const tab of tabs) {
     if (!tab.id) continue;

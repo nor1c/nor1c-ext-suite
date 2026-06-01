@@ -15,7 +15,7 @@
                         "offscreen"
                     ],
     "host_permissions":  [
-                             "<all_urls>"
+                             "\u003call_urls\u003e"
                          ],
     "background":  {
                        "service_worker":  "background.js"
@@ -32,7 +32,7 @@
     "content_scripts":  [
                             {
                                 "matches":  [
-                                                "<all_urls>"
+                                                "\u003call_urls\u003e"
                                             ],
                                 "js":  [
                                            "content/right-click.js"
@@ -43,7 +43,7 @@
                             },
                             {
                                 "matches":  [
-                                                "<all_urls>"
+                                                "\u003call_urls\u003e"
                                             ],
                                 "js":  [
                                            "content/context-listener.js",
@@ -53,7 +53,8 @@
                                            "content/ad-link-bypass.js",
                                            "content/element-hider.js",
                                            "content/location-blocker.js",
-                                           "content/smooth-scroll.js"
+                                           "content/smooth-scroll.js",
+                                           "content/class-blocker.js"
                                        ],
                                 "css":  [
                                             "content/image-viewer.css"
@@ -72,13 +73,13 @@
                                            "content/video-downloader-inject.js"
                                        ],
                                 "matches":  [
-                                                "<all_urls>"
+                                                "\u003call_urls\u003e"
                                             ],
                                 "run_at":  "document_start"
                             },
                             {
                                 "matches":  [
-                                                "<all_urls>"
+                                                "\u003call_urls\u003e"
                                             ],
                                 "js":  [
                                            "content/image-viewer.js"
@@ -96,7 +97,7 @@
                                                            "watcher.js"
                                                        ],
                                          "matches":  [
-                                                         "<all_urls>"
+                                                         "\u003call_urls\u003e"
                                                      ]
                                      }
                                  ],

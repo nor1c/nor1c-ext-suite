@@ -535,3 +535,44 @@ input:focus-visible + .slider {
   width: 14px;
   height: 14px;
 }
+
+/* Class Blocker */
+.blocker-input-section {
+  border-top: 1px solid #e8f0fe;
+  background: #fafcff;
+}
+
+.blocker-input-wrap {
+  padding: 10px 24px 14px;
+}
+
+.blocker-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  color: #1e3a5f;
+  background: #ffffff;
+  resize: vertical;
+  transition: border-color 0.15s;
+  outline: none;
+  line-height: 1.5;
+}
+
+.blocker-textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.blocker-textarea::placeholder {
+  color: #b0c4de;
+}
+
+.blocker-hint {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 6px;
+  line-height: 1.4;
+}

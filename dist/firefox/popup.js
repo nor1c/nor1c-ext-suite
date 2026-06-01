@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false, elementHider: true };
+  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider', 'classBlocker'];
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false, elementHider: true , classBlocker: false};
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -241,9 +241,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elementHiderOn = document.getElementById('element-hider-toggle').checked;
   updateElementHiderVisibility(elementHiderOn);
 
+  const classBlockerOn = document.getElementById('class-blocker-toggle').checked;
+  const blockerSection = document.getElementById('class-blocker-section');
+  const blockerInput = document.getElementById('blocked-selectors-input');
+  blockerSection.style.display = classBlockerOn ? '' : 'none';
+
+  document.getElementById('class-blocker-toggle').addEventListener('change', async e => {
+    await chrome.storage.sync.set({ classBlocker: e.target.checked });
+    blockerSection.style.display = e.target.checked ? '' : 'none';
+  });
+
+  const result2 = await chrome.storage.sync.get(['blockedSelectors']);
+  blockerInput.value = result2.blockedSelectors || '';
+  let saveTimer = null;
+  blockerInput.addEventListener('input', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const val = blockerInput.value;
+      await chrome.storage.sync.set({ blockedSelectors: val });
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: 'blockedSelectors-changed', value: val }).catch(() => {});
+      }
+    }, 400);
+  });
+
   await loadHiddenElements();
 });
 
 function toKebab(camel) {
   return camel.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
 }
+
+

@@ -22,7 +22,6 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">GIF Blocker</div>
@@ -33,7 +32,6 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Video Controls</div>
@@ -44,7 +42,6 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
         <div class="toggle-info">
           <div class="toggle-label" id="site-exclude-label">Disable for this site</div>
@@ -55,7 +52,6 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Video Download</div>
@@ -66,12 +62,10 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div id="video-sources-section" style="display:none; border-top: 1px solid #e8f0fe; background: #ffffff;">
         <iframe id="video-downloader-frame" src="video-downloader-popup.html"
           style="width:100%; height:0; border:none; border-radius:0 0 8px 8px; display:block;"></iframe>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Block Tab Ads</div>
@@ -82,7 +76,6 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Smooth Scroll</div>
@@ -93,20 +86,34 @@
           <span class="slider"></span>
         </label>
       </div>
-
       <div class="toggle-card">
         <div class="toggle-info">
           <div class="toggle-label">Element Hider</div>
-          <div class="toggle-desc">Hide elements you've picked on each site</div>
+          <div class="toggle-desc">Hide elements you have picked on each site</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="element-hider-toggle">
           <span class="slider"></span>
         </label>
       </div>
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">Class Blocker</div>
+          <div class="toggle-desc">Block elements by class or ID name</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="class-blocker-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
+        <div class="blocker-input-wrap">
+          <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="3" spellcheck="false"></textarea>
+          <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
+        </div>
+      </div>
     </div>
   </div>
-
   <div class="picker-section" id="picker-section">
     <button id="pick-element-btn" class="pick-element-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,7 +124,6 @@
       Pick Element to Hide
     </button>
   </div>
-
   <div id="hidden-elements-section" class="hidden-elements-section" style="display: none;">
     <div class="hidden-elements-header">
       <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
@@ -126,11 +132,9 @@
     <div id="hidden-elements-list" class="hidden-elements-list"></div>
     <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
   </div>
-
   <footer class="footer">
-    <span class="footer-text">Always active: Force Right-Click · Copy Link Text · Image Viewer</span>
+    <span class="footer-text">Always active: Force Right-Click Copy Link Text Image Viewer</span>
   </footer>
-
   <script src="popup.js"></script>
 </body>
 </html>
