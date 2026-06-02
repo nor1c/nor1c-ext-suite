@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', async () => {
+﻿document.addEventListener('DOMContentLoaded', async () => {
   const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider', 'classBlocker'];
   const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false, elementHider: true , classBlocker: false};
 
@@ -267,10 +267,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   await loadHiddenElements();
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors'];
+
+  document.getElementById('export-btn').addEventListener('click', async () => {
+    const data = await chrome.storage.sync.get(backupKeys);
+    const payload = { version: 1, exportedAt: new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const date = new Date().toISOString().slice(0, 10);
+    await chrome.downloads.download({ url, filename: `nor1c-suite-settings-${date}.json` });
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  });
+
+  document.getElementById('import-btn').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!payload.version || !payload.data || typeof payload.data !== 'object') {
+        throw new Error('Invalid backup file format.');
+      }
+      const importKeys = Object.keys(payload.data);
+      const unknownKeys = importKeys.filter(k => !backupKeys.includes(k));
+      if (unknownKeys.length > 0) {
+        throw new Error(`Unknown keys in backup: ${unknownKeys.join(', ')}`);
+      }
+      const toSet = {};
+      for (const key of backupKeys) {
+        if (key in payload.data) {
+          toSet[key] = payload.data[key];
+        }
+      }
+      await chrome.storage.sync.set(toSet);
+      window.location.reload();
+    } catch (err) {
+      alert('Import failed: ' + err.message);
+    }
+    e.target.value = '';
+  });
+
 });
 
 function toKebab(camel) {
   return camel.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
 }
+
 
 

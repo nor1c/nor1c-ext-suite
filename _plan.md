@@ -1,68 +1,50 @@
-﻿# Right-Click Blocker Investigation
+﻿# Backup and Import Settings Feature
 
-## Findings
-These things caused unable to right click on right click blocked site even though the extension is running.
+## Goal
+Add a backup/import mechanism that lets users export all extension settings to a JSON file and restore them later from a file, covering every toggle, exclusion list, hidden rule, and custom selector.
 
-### 1. Primary Blocker — Line 76-77
+## Storage Keys to Cover
 
-```javascript
-function mousedwn(e){
-  try{
-    if(event.button==2||event.button==3)return false
-  }catch(e){
-    if(e.which==3)return false
-  }
-}
-document.oncontextmenu=function(){return false};
-document.ondragstart=function(){return false};
-document.onmousedown=mousedwn
-```
+| Key | Type | Description |
+|-----|------|-------------|
+| imageBlocker | bool | Block all images |
+| gifBlocker | bool | Block GIF images |
+| videoControls | bool | Force HTML5 video controls |
+| videoDownload | bool | Auto-detect videos for download |
+| adLinkBypass | bool | Auto-close ad tab popups |
+| smoothScroll | bool | Smooth scrolling |
+| elementHider | bool | Element hider toggle |
+| classBlocker | bool | Class/ID blocker toggle |
+| videoControlsExcluded | string[] | Domains excluded from video controls |
+| hiddenRules | object | Per-domain hidden element rules |
+| blockedSelectors | string | Comma-separated blocked selectors |
 
-**What it does:**
-- `document.oncontextmenu` — intercepts right-click context menu
-- `document.onmousedown` — blocks right/middle mouse buttons (button 2 & 3)
-- `document.ondragstart` — blocks drag operations
+## Files to Touch
 
-### 2. Keyboard Shortcut Blocker — Line 77 (end)
+1. src/popup.html - Add backup/import card below all toggles
+2. src/popup.css - Add styles for backup/import section
+3. src/popup.js - Add export/import logic
 
-```javascript
-window.addEventListener("keydown",function(e){
-  if(e.ctrlKey&&(e.which==65||e.which==66||e.which==67||e.which==73||e.which==80||e.which==83||e.which==85||e.which==86)){
-    e.preventDefault()
-  }
-});
-document.keypress=function(e){
-  if(e.ctrlKey&&(e.which==65||e.which==66||e.which==67||e.which==73||e.which==80||e.which==83||e.which==85||e.which==86)){}
-  return false
-}
-```
+## Steps
 
-**What it does:** Blocks Ctrl+A, B, C, I, P, S, U, V (select all, bold, copy, inspect, print, save, view source, paste)
+1. Add a collapsible "Settings Management" card in popup.html after class-blocker section, with Export and Import buttons and a hidden file input.
+2. Add CSS styles in popup.css for the new section (backup-card, backup-buttons, file input styling).
+3. In popup.js DOMContentLoaded:
+   - Add click handler for Export button: read all 11 keys from chrome.storage.sync, wrap in { version: 1, exportedAt: <ISO>, data: {...} }, create a Blob download via object URL.
+   - Add change handler for hidden file input: read uploaded JSON, validate structure (version, data keys), write each key to chrome.storage.sync, then reload the popup to reflect restored state.
+   - Add click handler for Import button that triggers the hidden file input.
 
-### 3. DevTools Blocker — Line 77 (end)
+## Expected Behavior
 
-```javascript
-document.onkeydown=function(e){
-  e=e||window.event;
-  if(e.keyCode==123||e.keyCode==18){return false}
-}
-```
+- Export: Downloads a .json file named nor1c-suite-settings-{YYYY-MM-DD}.json containing all current settings.
+- Import: User picks a valid exported JSON file -> all settings overwritten -> popup reloads with restored state.
+- Validation: Reject files with missing version field or non-object data. Show error via alert.
 
-**What it does:** Blocks F12 (devtools) and Alt key
+## Acceptance Criteria
 
-### 4. CSS-based Text Selection Blocker — Line 77
-
-```css
-*:(input,textarea){-webkit-touch-callout:none;-webkit-user-select:none}
-img{-webkit-touch-callout:none;-webkit-user-select:none}
-```
-
-### 5. Iframe Context Menu Blocker — Line 82 (end)
-
-```javascript
-$('iframe').on('contextmenu', function(e){e.preventDefault();});
-```
-
-## Summary
-
-All blockers are inline scripts/styles injected directly into the HTML page. To unblock right-click, need to neutralize all 5 mechanisms listed above.
+- All 11 settings keys are exported and importable.
+- Export file is valid JSON and can be inspected manually.
+- Import overwrites all previous settings atomically.
+- Popup reflects imported settings after reload.
+- No secrets/keys stored in plaintext (none exist in this project).
+- UI is consistent with existing design (toggle-card style, muted colors).

@@ -346,14 +346,14 @@ input:focus-visible + .slider {
 
 .footer {
   padding: 12px 24px;
-  border-top: 1px solid #e8f0fe;
-  background: #f8fbff;
+  border-top: 1px solid #4b5563;
+  background: #374151;
 }
 
 .footer-text {
   font-size: 10px;
   font-weight: 500;
-  color: #94a3b8;
+  color: #ffffff;
   line-height: 1.5;
 }
 
@@ -575,4 +575,48 @@ input:focus-visible + .slider {
   color: #94a3b8;
   margin-top: 6px;
   line-height: 1.4;
+}
+.backup-section {
+  padding: 12px 24px;
+  border-top: 1px solid #4b5563;
+  background: #374151;
+}
+
+.backup-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.backup-body {
+  display: flex;
+  gap: 10px;
+}
+
+.backup-btn {
+  flex: 1;
+  padding: 8px 14px;
+  border: 1px solid #6b7280;
+  border-radius: 8px;
+  background: #4b5563;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: 'Inter', -apple-system, sans-serif;
+  text-align: center;
+}
+
+.backup-btn:hover {
+  background: #6b7280;
+  border-color: #9ca3af;
+  color: #ffffff;
+}
+
+.backup-btn:active {
+  transform: scale(0.97);
 }
