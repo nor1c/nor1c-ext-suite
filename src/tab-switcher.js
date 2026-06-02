@@ -3,6 +3,16 @@
   const tabList = document.getElementById('tab-list');
   const noResults = document.getElementById('no-results');
 
+
+  function closeSwitcher() {
+    if (window !== window.top) {
+      window.parent.postMessage({ type: 'close-tab-switcher' }, '*');
+    } else {
+      window.close();
+    }
+  }
+
+
   let allTabs = [];
   let filteredTabs = [];
   let selectedIndex = 0;
@@ -130,7 +140,7 @@
     if (!tab) return;
     chrome.tabs.update(tab.id, { active: true });
     chrome.windows.update(tab.windowId, { focused: true });
-    window.close();
+    closeSwitcher();
   }
 
   searchInput.addEventListener('input', filterTabs);
@@ -150,15 +160,24 @@
       e.preventDefault();
       switchToTab(selectedIndex);
     } else if (e.key === 'Escape') {
-      window.close();
+      closeSwitcher();
     }
   });
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      window.close();
+      closeSwitcher();
     }
   });
 
   loadTabs();
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'focus-input') {
+      searchInput.focus();
+    }
+  });
+
+  searchInput.focus();
+  setTimeout(function() { searchInput.focus(); }, 100);
 })();

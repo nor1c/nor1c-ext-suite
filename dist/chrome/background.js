@@ -145,22 +145,34 @@ let _quickTabSwitcherEnabled = true;
 chrome.storage.sync.get(['quickTabSwitcher'], function(r) {
   _quickTabSwitcherEnabled = r.quickTabSwitcher !== false;
 });
-chrome.storage.onChanged.addListener(function(changes, area) {
-  if (area === 'sync' && changes.quickTabSwitcher) {
-    _quickTabSwitcherEnabled = changes.quickTabSwitcher.newValue !== false;
+async function openTabSwitcher() {
+  if (!_quickTabSwitcherEnabled) return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && tab.id) {
+    chrome.tabs.sendMessage(tab.id, { type: 'open-tab-switcher-overlay' }).catch(() => {
+      chrome.windows.create({
+        url: 'tab-switcher.html',
+        type: 'popup',
+        width: 500,
+        height: 400,
+        focused: true
+      });
+    });
+  } else {
+    chrome.windows.create({
+      url: 'tab-switcher.html',
+      type: 'popup',
+      width: 500,
+      height: 400,
+      focused: true
+    });
   }
-});
+}
 
 chrome.commands.onCommand.addListener(async function(command) {
   if (command !== 'switch-tab') return;
-  if (!_quickTabSwitcherEnabled) return;
-  chrome.windows.create({
-    url: 'tab-switcher.html',
-    type: 'popup',
-    width: 500,
-    height: 400,
-    focused: true
-  });
+  await openTabSwitcher();
 });
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {

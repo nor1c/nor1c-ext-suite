@@ -126,6 +126,7 @@
 
   await loadSiteExclude();
 
+
   const videoDownloadOn = document.getElementById('video-download-toggle').checked;
   updateVideoDownloaderFrame(videoDownloadOn);
 
@@ -283,7 +284,7 @@
   });
 
     await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors'];
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications'];
 
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await chrome.storage.sync.get(backupKeys);
