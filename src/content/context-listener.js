@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   let lastRightClickedLink = null;
 
   document.addEventListener('contextmenu', function (e) {
@@ -14,24 +14,8 @@
 
   function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).catch(function () {
-        fallbackCopy(text);
-      });
-    } else {
-      fallbackCopy(text);
+      navigator.clipboard.writeText(text).catch(() => {});
     }
-  }
-
-  function fallbackCopy(text) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    ta.style.pointerEvents = 'none';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch (_) {}
-    ta.remove();
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

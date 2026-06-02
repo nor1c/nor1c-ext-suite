@@ -1,4 +1,4 @@
-(function() {
+﻿(function() {
   const RANDOM_ID_RE = /^(css-[a-z0-9]+|jss\d+|_[a-zA-Z0-9]{5,}|radix-|headlessui-|makeStyles-\w+|Component_\w+|sc-\w+|styled-\w+|emotion-\w+)/;
   const SEMANTIC_TAGS = new Set(['main', 'header', 'footer', 'nav', 'article', 'section', 'aside', 'form']);
   const UNSTABLE_CLASS_RE = /css-[a-z0-9]+|jss\d+|_[a-zA-Z0-9]{5,}|makeStyles-\w+|Component_\w+|sc-\w+|styled-\w+|emotion-\w+/;
@@ -10,7 +10,7 @@
   let lastHovered = null;
   let iframeOverride = null;
 
-  // Cached rules for current domain — avoids chrome.storage.sync.get on every mutation
+  // Cached rules for current domain â€” avoids chrome.storage.sync.get on every mutation
   let cachedDomainRules = null;
   let rulesLoaded = false;
   let debounceTimer = null;
@@ -183,7 +183,7 @@
     document.body.appendChild(hoverLabel);
     cancelPill = document.createElement('button');
     cancelPill.className = 'nor1c-eh-cancel';
-    cancelPill.textContent = '✕ Cancel (Esc)';
+    cancelPill.textContent = 'âœ• Cancel (Esc)';
     cancelPill.addEventListener('click', exitPicker);
     document.body.appendChild(cancelPill);
   }
@@ -214,7 +214,7 @@
     const tag = el.tagName.toLowerCase();
     const sel = buildStructuralSelector(el);
     const shortPath = sel.split(' > ').slice(-3).join(' > ');
-    hoverLabel.textContent = tag + ' · ' + shortPath;
+    hoverLabel.textContent = tag + ' Â· ' + shortPath;
     hoverLabel.style.display = 'block';
     hoverLabel.style.left = (e.clientX + 16) + 'px';
     hoverLabel.style.top = (e.clientY + 16) + 'px';
@@ -375,7 +375,7 @@
         // CSS handles exact selectors; only do fuzzy match fallback here
         if (!elementHiderEnabled || !cachedDomainRules || cachedDomainRules.length === 0) return;
         for (const rule of cachedDomainRules) applySingleRule(rule);
-      }, 300);
+      }, 500);
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
   }

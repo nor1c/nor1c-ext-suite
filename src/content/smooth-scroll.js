@@ -11,7 +11,7 @@
   let currentDecay = 0.90;
   const MIN_VEL = 0.3;
   const scrollableCache = new WeakMap();
-  var hasPlayingVideo = false;
+  let hasPlayingVideo = false;
 
   function isScrollable(node) {
     if (scrollableCache.has(node)) return true;
@@ -70,8 +70,8 @@
       return;
     }
 
-    var maxScroll = getMaxScroll();
-    var next = getScrollTop() + velocity * dt;
+    const maxScroll = getMaxScroll();
+    let next = getScrollTop() + velocity * dt;
     if (next < 0) next = 0;
     if (next > maxScroll) next = maxScroll;
     scrollTo(next);
@@ -82,12 +82,12 @@
   }
 
   function isInputTarget(el) {
-    var tag = el.tagName || '';
+    const tag = el.tagName || '';
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
   }
 
   function isMediaTarget(el) {
-    var tag = el.tagName || '';
+    const tag = el.tagName || '';
     if (tag === 'VIDEO' || tag === 'AUDIO') return true;
     if (el.closest && el.closest('video, audio, [role="application"]')) return true;
     return false;
@@ -99,21 +99,21 @@
     if (isMediaTarget(e.target)) return false;
     if (document.fullscreenElement || document.webkitFullscreenElement) return false;
 
-    var ancestor = findScrollableAncestor(e.target);
+    const ancestor = findScrollableAncestor(e.target);
     if (ancestor && !isPageScroller(ancestor)) return false;
     scrollTarget = ancestor || null;
 
-    var maxScroll = getMaxScroll();
+    const maxScroll = getMaxScroll();
     if (maxScroll <= 0) return false;
 
-    var absDelta = Math.abs(delta);
-    var intensity = Math.min(absDelta / 150, 1);
-    var scale = 0.12 + 0.63 * intensity;
+    const absDelta = Math.abs(delta);
+    const intensity = Math.min(absDelta / 150, 1);
+    const scale = 0.12 + 0.63 * intensity;
     currentDecay = 0.93 - 0.15 * intensity;
 
     velocity += delta * scale;
 
-    var maxVel = 80;
+    const maxVel = 80;
     if (velocity > maxVel) velocity = maxVel;
     if (velocity < -maxVel) velocity = -maxVel;
 
@@ -132,7 +132,7 @@
   function onKeyDown(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-    var delta = 0;
+    let delta = 0;
     if (e.key === 'PageDown') delta = window.innerHeight * 0.85;
     else if (e.key === 'PageUp') delta = -window.innerHeight * 0.85;
     else if (e.key === 'ArrowDown') delta = 50;
@@ -148,15 +148,15 @@
 
   function setupVideoTracking() {
     function findVideoInPath(e) {
-      var path = e.composedPath ? e.composedPath() : [e.target];
-      for (var i = 0; i < path.length; i++) {
+      const path = e.composedPath ? e.composedPath() : [e.target];
+      for (let i = 0; i < path.length; i++) {
         if (path[i] && path[i].tagName === 'VIDEO') return path[i];
       }
       return null;
     }
 
     document.addEventListener('playing', function (e) {
-      var v = findVideoInPath(e);
+      const v = findVideoInPath(e);
       if (v && !v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
         hasPlayingVideo = true;
       }
@@ -171,16 +171,16 @@
     }, true);
 
     function walk(root) {
-      var videos = root.querySelectorAll('video');
-      for (var i = 0; i < videos.length; i++) {
-        var v = videos[i];
+      const videos = root.querySelectorAll('video');
+      for (let i = 0; i < videos.length; i++) {
+        const v = videos[i];
         if (!v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
           hasPlayingVideo = true;
           return;
         }
       }
-      var all = root.querySelectorAll('*');
-      for (var i = 0; i < all.length; i++) {
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
         if (all[i].shadowRoot && !hasPlayingVideo) walk(all[i].shadowRoot);
       }
     }
@@ -224,7 +224,7 @@
   setupVideoTracking();
 
   chrome.storage.sync.get(['smoothScroll'], (result) => {
-    var val = result.smoothScroll === true;
+    const val = result.smoothScroll === true;
     active = val;
     if (val) apply();
   });

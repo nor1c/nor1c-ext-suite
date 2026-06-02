@@ -54,14 +54,14 @@
     stopFrameResize();
     frameResizeTimer = setInterval(function() {
       try {
-        var body = frame.contentDocument && frame.contentDocument.body;
+        const body = frame.contentDocument && frame.contentDocument.body;
         if (!body) return;
-        var h = body.scrollHeight;
+        const h = body.scrollHeight;
         if (h > 0 && frame.style.height !== h + 'px') {
           frame.style.height = h + 'px';
         }
       } catch(e) {}
-    }, 200);
+    }, 300);
   }
 
   function stopFrameResize() {

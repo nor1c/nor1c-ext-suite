@@ -1,8 +1,8 @@
-(function () {
+﻿(function () {
   const script = document.createElement('script');
   script.textContent = `
     (function() {
-      var fakeGeo = {
+      const fakeGeo = {
         getCurrentPosition: function(success, error) {
           if (typeof error === 'function') {
             error({ code: 1, message: 'User denied Geolocation' });
@@ -22,7 +22,7 @@
         configurable: true
       });
 
-      var origQuery = Permissions.prototype.query;
+      const origQuery = Permissions.prototype.query;
       Permissions.prototype.query = function(desc) {
         if (desc && desc.name === 'geolocation') {
           return Promise.resolve({ state: 'denied', onchange: null });

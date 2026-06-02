@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const STYLE_ID = 'nor1c-image-blocker-style';
   const WRAPPER_CLASS = 'nor1c-img-blocked-wrapper';
   const OVERLAY_CLASS = 'nor1c-img-blocked-overlay';
@@ -59,11 +59,11 @@
     if (el.nodeType !== 1) return false;
     if (!CONTAINER_TAGS.has(el.tagName)) return false;
 
-    var rect = el.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
     if (rect.width < MIN_SIZE && rect.height < MIN_SIZE) return false;
 
     try {
-      var bg = getComputedStyle(el).backgroundImage;
+      const bg = getComputedStyle(el).backgroundImage;
       return bg && bg !== 'none' && bg.startsWith('url(');
     } catch (_) {
       return false;
@@ -74,14 +74,12 @@
     if (processedEls.has(el)) return;
     processedEls.add(el);
 
-    // Skip if already wrapped
     if (el.parentElement && el.parentElement.classList.contains(WRAPPER_CLASS)) return;
 
-    var wrapper = document.createElement('div');
+    const wrapper = document.createElement('div');
     wrapper.className = WRAPPER_CLASS;
 
-    // Copy display/style to preserve layout
-    var computed = getComputedStyle(el);
+    const computed = getComputedStyle(el);
     if (computed.display === 'block') {
       wrapper.style.display = 'block';
     }
@@ -89,7 +87,7 @@
     wrapper.style.height = computed.height;
     wrapper.style.verticalAlign = computed.verticalAlign;
 
-    var overlay = document.createElement('div');
+    const overlay = document.createElement('div');
     overlay.className = OVERLAY_CLASS;
     overlay.textContent = OVERLAY_TEXT;
 
@@ -97,7 +95,6 @@
     wrapper.appendChild(el);
     wrapper.appendChild(overlay);
 
-    // Hide the actual image but keep it in DOM
     el.style.setProperty('opacity', '0', 'important');
     el.style.setProperty('visibility', 'hidden', 'important');
   }
@@ -106,18 +103,15 @@
     if (bgProcessedEls.has(el)) return;
     bgProcessedEls.add(el);
 
-    // Save original bg for restore
     el.setAttribute('data-nor1c-bg', el.style.backgroundImage || '');
     el.setAttribute('data-nor1c-bg-color', el.style.backgroundColor || '');
 
     el.style.setProperty('background-image', 'none', 'important');
     el.style.setProperty('background-color', BG_COLOR, 'important');
 
-    // Insert overlay child
-    var overlay = document.createElement('div');
+    const overlay = document.createElement('div');
     overlay.className = OVERLAY_CLASS;
     overlay.textContent = OVERLAY_TEXT;
-    // Position overlay relative to the container
     if (getComputedStyle(el).position === 'static') {
       el.style.position = 'relative';
       el.setAttribute('data-nor1c-pos-static', '1');
@@ -139,8 +133,8 @@
     }
     if (el.querySelectorAll) {
       CONTAINER_TAGS.forEach(function (_tag) {
-        var nodes = el.getElementsByTagName(_tag);
-        for (var i = 0; i < nodes.length; i++) {
+        const nodes = el.getElementsByTagName(_tag);
+        for (let i = 0; i < nodes.length; i++) {
           if (shouldBlock(nodes[i])) blockBgContainer(nodes[i]);
         }
       });
@@ -150,9 +144,9 @@
   function startObserver() {
     if (observer) return;
     observer = new MutationObserver((mutations) => {
-      for (var i = 0; i < mutations.length; i++) {
-        var nodes = mutations[i].addedNodes;
-        for (var j = 0; j < nodes.length; j++) {
+      for (let i = 0; i < mutations.length; i++) {
+        const nodes = mutations[i].addedNodes;
+        for (let j = 0; j < nodes.length; j++) {
           if (nodes[j].nodeType === 1) {
             scanElement(nodes[j]);
           }
@@ -173,28 +167,23 @@
   }
 
   function unwrapImgOrPicture(el) {
-    var wrapper = el.parentElement;
+    const wrapper = el.parentElement;
     if (!wrapper || !wrapper.classList.contains(WRAPPER_CLASS)) return;
-    var parent = wrapper.parentElement;
+    const parent = wrapper.parentElement;
     if (!parent) return;
-    // Remove overlay
-    var overlay = wrapper.querySelector('.' + OVERLAY_CLASS);
+    const overlay = wrapper.querySelector('.' + OVERLAY_CLASS);
     if (overlay) overlay.remove();
-    // Unwrap: move img back
     parent.insertBefore(el, wrapper);
     wrapper.remove();
-    // Clear inline styles set by blockImgOrPicture
     el.style.removeProperty('opacity');
     el.style.removeProperty('visibility');
   }
 
   function restoreBgContainer(el) {
-    // Remove overlays added by us
-    var overlays = el.querySelectorAll('.' + OVERLAY_CLASS);
-    for (var i = 0; i < overlays.length; i++) overlays[i].remove();
+    const overlays = el.querySelectorAll('.' + OVERLAY_CLASS);
+    for (let i = 0; i < overlays.length; i++) overlays[i].remove();
 
-    // Restore original bg
-    var origBg = el.getAttribute('data-nor1c-bg');
+    const origBg = el.getAttribute('data-nor1c-bg');
     if (origBg !== null) {
       if (origBg) el.style.backgroundImage = origBg;
       else el.style.removeProperty('background-image');
@@ -203,7 +192,7 @@
       el.style.removeProperty('background-image');
     }
 
-    var origBgColor = el.getAttribute('data-nor1c-bg-color');
+    const origBgColor = el.getAttribute('data-nor1c-bg-color');
     if (origBgColor !== null) {
       if (origBgColor) el.style.backgroundColor = origBgColor;
       else el.style.removeProperty('background-color');
@@ -221,10 +210,9 @@
   }
 
   function removeAll() {
-    // Remove all wrappers
     document.querySelectorAll('.' + WRAPPER_CLASS).forEach(function (wrapper) {
-      var img = wrapper.querySelector('img, picture');
-      var parent = wrapper.parentElement;
+      const img = wrapper.querySelector('img, picture');
+      const parent = wrapper.parentElement;
       if (img && parent) {
         parent.insertBefore(img, wrapper);
         img.style.removeProperty('opacity');
@@ -232,13 +220,11 @@
       }
       wrapper.remove();
     });
-    // Remove all bg-container overlays and restore
     document.querySelectorAll('.' + OVERLAY_CLASS).forEach(function (overlay) {
-      var container = overlay.parentElement;
+      const container = overlay.parentElement;
       overlay.remove();
       if (container) restoreBgContainer(container);
     });
-    // Also clean any remaining bg containers tracked in WeakSet (can't iterate WeakSet, but overlays are gone)
   }
 
   function apply() {
@@ -259,10 +245,8 @@
     else remove();
   }
 
-  // Defer observer + CSS until storage confirms feature is enabled
-  // This avoids wasting CPU on pages where image blocker is off
   chrome.storage.sync.get(['imageBlocker'], (result) => {
-    var val = result.imageBlocker === true;
+    const val = result.imageBlocker === true;
     active = val;
     if (active) {
       injectCSS();

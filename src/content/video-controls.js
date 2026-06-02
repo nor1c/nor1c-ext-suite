@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   let active = false;
   let observer = null;
   let walkInterval = null;
@@ -58,16 +58,16 @@
   }
 
   function findInstagramMuteButton(video) {
-    var container = video.closest('article, [role="dialog"], main, section') || video.parentElement;
+    const container = video.closest('article, [role="dialog"], main, section') || video.parentElement;
     if (!container) return null;
 
-    var svg = container.querySelector('svg[aria-label="Audio is playing"], svg[aria-label="Audio is muted"]');
+    const svg = container.querySelector('svg[aria-label="Audio is playing"], svg[aria-label="Audio is muted"]');
     if (svg) {
-      var btn = svg.closest('[role="button"], button');
+      const btn = svg.closest('[role="button"], button');
       if (btn) return btn;
     }
 
-    var btnAlt = container.querySelector('button[aria-label="Toggle audio"], button[aria-label*="audio" i]');
+    const btnAlt = container.querySelector('button[aria-label="Toggle audio"], button[aria-label*="audio" i]');
     if (btnAlt) return btnAlt;
 
     return null;
@@ -76,12 +76,12 @@
   function syncInstagramButton(video) {
     if (syncing.has(video)) return;
     syncing.add(video);
-    var btn = findInstagramMuteButton(video);
+    const btn = findInstagramMuteButton(video);
     if (!btn) { syncing.delete(video); return; }
-    var svg = btn.querySelector('svg[aria-label]');
+    const svg = btn.querySelector('svg[aria-label]');
     if (!svg) { syncing.delete(video); return; }
-    var label = svg.getAttribute('aria-label');
-    var isPlaying = label === 'Audio is playing';
+    const label = svg.getAttribute('aria-label');
+    const isPlaying = label === 'Audio is playing';
     if (video.muted && isPlaying) {
       btn.click();
     } else if (!video.muted && !isPlaying) {
@@ -91,10 +91,10 @@
   }
 
   function liftSoundButton(video) {
-    var btn = findInstagramMuteButton(video);
+    const btn = findInstagramMuteButton(video);
     if (!btn) return;
-    var limit = video.closest('article, [role="dialog"], main, section') || document.documentElement;
-    var el = btn;
+    const limit = video.closest('article, [role="dialog"], main, section') || document.documentElement;
+    let el = btn;
     while (el && el !== limit) {
       el.style.setProperty('z-index', '2147483647', 'important');
       if (getComputedStyle(el).position === 'static') {
@@ -134,15 +134,15 @@
     }
   }
 
-  // Cache for liftSoundButton — avoid repeated getComputedStyle walks
+  // Cache for liftSoundButton â€” avoid repeated getComputedStyle walks
   // when the button hasn't moved in the DOM
   const liftDone = new WeakSet();
 
   function forceControls(video) {
     if (!video || video.tagName !== 'VIDEO') return;
 
-    var now = Date.now();
-    var last = timestamps.get(video) || 0;
+    const now = Date.now();
+    const last = timestamps.get(video) || 0;
     if (now - last < 250) return;
     timestamps.set(video, now);
 
@@ -166,16 +166,16 @@
   function setupVolumeGuard(video) {
     if (volumeState.has(video)) return;
 
-    var nativeMutedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
-    var nativeVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+    const nativeMutedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
+    const nativeVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
     volumeState.set(video, { muted: video.muted, volume: video.volume });
 
-    var _muted = video.muted;
+    const _muted = video.muted;
 
     Object.defineProperty(video, 'muted', {
       get: function () { return _muted; },
       set: function (val) {
-        var prev = _muted;
+        let prev = _muted;
         _muted = val;
         volumeState.set(video, { muted: val, volume: video.volume });
         if (prev !== val && !syncing.has(video)) syncInstagramButton(video);
@@ -198,7 +198,7 @@
     });
 
     video.addEventListener('seeking', function () {
-      var saved = volumeState.get(video);
+      const saved = volumeState.get(video);
       if (saved) {
         _muted = saved.muted;
         nativeMutedDesc.set.call(video, saved.muted);
@@ -208,7 +208,7 @@
     });
 
     video.addEventListener('playing', function () {
-      var saved = volumeState.get(video);
+      const saved = volumeState.get(video);
       if (saved) {
         _muted = saved.muted;
         nativeMutedDesc.set.call(video, saved.muted);
@@ -216,8 +216,8 @@
       }
     });
 
-    var mutedObs = new MutationObserver(function () {
-      var saved = volumeState.get(video);
+    const mutedObs = new MutationObserver(function () {
+      const saved = volumeState.get(video);
       if (saved && nativeMutedDesc.get.call(video) !== saved.muted) {
         nativeMutedDesc.set.call(video, saved.muted);
         syncInstagramButton(video);
@@ -299,45 +299,66 @@
     walk(document.documentElement);
   }
 
-  function startShadowPoll() {
-    if (walkInterval) return;
-    walkInterval = setInterval(() => {
-      if (!active) return;
+  let videoObserver = null;
+  let overlayInterval = null;
 
-      document.querySelectorAll('video[nor1c]').forEach(function (v) {
-        if (!v.controls) {
-          v.controls = true;
-          v.setAttribute('controls', 'true');
-        }
-        var saved = volumeState.get(v);
-        if (saved) {
-          if (v.muted !== saved.muted) v.muted = saved.muted;
-          if (v.volume !== saved.volume) v.volume = saved.volume;
-        }
-        disableOverlays(v);
-        // Only walk DOM for liftSoundButton once per video —
-        // the z-index/position styles persist, no need to re-apply
-        if (!liftDone.has(v)) {
-          liftSoundButton(v);
-          liftDone.add(v);
-        }
-      });
-
-      // Single combined selector instead of two separate querySelectorAll
-      document.querySelectorAll('[aria-label="Video player"],[role="group"][data-visualcompletion="ignore"]').forEach(nukeOverlay);
-    }, 4000);
-  }
-
-  function stopShadowPoll() {
-    if (walkInterval) {
-      clearInterval(walkInterval);
-      walkInterval = null;
+  function enforceVideo(v) {
+    if (!v.controls) {
+      v.controls = true;
+      v.setAttribute('controls', 'true');
+    }
+    const saved = volumeState.get(v);
+    if (saved) {
+      if (v.muted !== saved.muted) v.muted = saved.muted;
+      if (v.volume !== saved.volume) v.volume = saved.volume;
+    }
+    disableOverlays(v);
+    if (!liftDone.has(v)) {
+      liftSoundButton(v);
+      liftDone.add(v);
     }
   }
 
+  function startVideoObserver() {
+    if (videoObserver) return;
+    videoObserver = new IntersectionObserver((entries) => {
+      if (!active) return;
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          enforceVideo(entry.target);
+        }
+      }
+    }, { threshold: 0.1 });
+    document.querySelectorAll('video[nor1c]').forEach(function (v) {
+      videoObserver.observe(v);
+      enforceVideo(v);
+    });
+  }
+
+  function stopVideoObserver() {
+    if (videoObserver) {
+      videoObserver.disconnect();
+      videoObserver = null;
+    }
+  }
+
+  function startOverlayPoll() {
+    if (overlayInterval) return;
+    overlayInterval = setInterval(() => {
+      if (!active) return;
+      document.querySelectorAll('[aria-label="Video player"],[role="group"][data-visualcompletion="ignore"]').forEach(nukeOverlay);
+    }, 30000);
+  }
+
+  function stopOverlayPoll() {
+    if (overlayInterval) {
+      clearInterval(overlayInterval);
+      overlayInterval = null;
+    }
+  }
   function getDomain() {
-    var h = location.hostname;
-    var parts = h.split('.');
+    const h = location.hostname;
+    const parts = h.split('.');
     if (parts.length <= 2) return h;
     return parts.slice(-2).join('.');
   }
@@ -352,22 +373,22 @@
     processAll();
     setTimeout(walkShadowRoots, 2000);
     startObserver();
-    startShadowPoll();
+    startVideoObserver(); startOverlayPoll();
   }
 
   function stop() {
     if (!active) return;
     active = false;
     stopObserver();
-    stopShadowPoll();
+    stopVideoObserver(); stopOverlayPoll();
   }
 
   function init() {
-    var domain = getDomain();
+    const domain = getDomain();
 
     chrome.storage.sync.get(['videoControls', 'videoControlsExcluded'], function (result) {
-      var enabled = result.videoControls !== undefined ? result.videoControls : false;
-      var excluded = result.videoControlsExcluded || [];
+      const enabled = result.videoControls !== undefined ? result.videoControls : false;
+      const excluded = result.videoControlsExcluded || [];
 
       if (enabled && !isExcluded(excluded, domain)) {
         start();
@@ -378,9 +399,9 @@
       if (area !== 'sync') return;
 
       if (changes.videoControls) {
-        var enabled = changes.videoControls.newValue;
+        const enabled = changes.videoControls.newValue;
         chrome.storage.sync.get(['videoControlsExcluded'], function (r) {
-          var excluded = r.videoControlsExcluded || [];
+          const excluded = r.videoControlsExcluded || [];
           if (enabled && !isExcluded(excluded, domain)) {
             start();
           } else {
@@ -390,9 +411,9 @@
       }
 
       if (changes.videoControlsExcluded) {
-        var excluded = changes.videoControlsExcluded.newValue || [];
+        const excluded = changes.videoControlsExcluded.newValue || [];
         chrome.storage.sync.get(['videoControls'], function (r) {
-          var enabled = r.videoControls !== undefined ? r.videoControls : false;
+          const enabled = r.videoControls !== undefined ? r.videoControls : false;
           if (enabled && !isExcluded(excluded, domain)) {
             start();
           } else {
@@ -411,7 +432,7 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'download-video' && msg.url && msg.filename) {
-      var a = document.createElement('a');
+      const a = document.createElement('a');
       a.href = msg.url;
       a.download = msg.filename;
       a.click();

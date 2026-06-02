@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const STYLE_ID = 'nor1c-gif-blocker-style';
   const CSS = `
     img[src$=".gif"],
@@ -65,7 +65,7 @@
     const alt = (el.getAttribute('alt') || '').toLowerCase();
     if (/\.gif$/.test(title) || /gif$/.test(title)) return true;
     if (/\.gif$/.test(alt) || /gif$/.test(alt)) return true;
-    // 3. loop + muted + autoplay + small dimensions → likely GIF-as-video
+    // 3. loop + muted + autoplay + small dimensions â†’ likely GIF-as-video
     if (el.loop && el.muted && el.autoplay) {
       const w = el.videoWidth || el.clientWidth || 0;
       const h = el.videoHeight || el.clientHeight || 0;
@@ -198,50 +198,81 @@
   // =============================================================
   // MutationObserver
   // =============================================================
-  function startObserver() {
-    if (observer) return;
-    observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.type === 'childList') {
-          for (const node of m.addedNodes) {
-            if (node.nodeType !== 1) continue;
-            hideImages(node);
-          }
-        } else if (m.type === 'attributes') {
-          if (m.target.nodeType !== 1) continue;
-          const tag = m.target.tagName;
-          // Re-check <img> element
-          if (tag === 'IMG') {
-            if (isGif(m.target)) hideElement(m.target);
-            else showElement(m.target);
-          }
-          // Re-check <video> element
-          if (tag === 'VIDEO') {
-            if (isVideoGif(m.target)) hideElement(m.target);
-            else showElement(m.target);
-          }
-          // Re-check for "GIF" label on attribute change
-          const gifLabel = findGifLabel(m.target);
-          if (gifLabel) hideMediaFromGifLabel(gifLabel);
-        }
-      }
-    });
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
+  let childListObserver = null;
+  let attrsObserver = null;
+
+  function observeAttrs(el) {
+    if (!attrsObserver) return;
+    attrsObserver.observe(el, {
       attributes: true,
       attributeFilter: ['src', 'data-src', 'data-lazy-src', 'alt', 'title', 'aria-label']
     });
   }
 
+  function startObserver() {
+    if (childListObserver) return;
+
+    const childListHandler = (mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          hideImagesAndWatch(node);
+        }
+      }
+    };
+
+    const attrsHandler = (mutations) => {
+      for (const m of mutations) {
+        if (m.target.nodeType !== 1) continue;
+        const tag = m.target.tagName;
+        if (tag === 'IMG') {
+          if (isGif(m.target)) hideElement(m.target);
+          else showElement(m.target);
+        }
+        if (tag === 'VIDEO') {
+          if (isVideoGif(m.target)) hideElement(m.target);
+          else showElement(m.target);
+        }
+      }
+    };
+
+    childListObserver = new MutationObserver(childListHandler);
+    childListObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    attrsObserver = new MutationObserver(attrsHandler);
+    document.querySelectorAll('img, video').forEach(function (el) {
+      attrsObserver.observe(el, {
+        attributes: true,
+        attributeFilter: ['src', 'data-src', 'data-lazy-src', 'alt', 'title', 'aria-label']
+      });
+    });
+  }
+
   function stopObserver() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
+    if (childListObserver) {
+      childListObserver.disconnect();
+      childListObserver = null;
+    }
+    if (attrsObserver) {
+      attrsObserver.disconnect();
+      attrsObserver = null;
     }
   }
 
-  // =============================================================
+  function hideImagesAndWatch(container) {
+    hideImages(container);
+    if (container.tagName === 'IMG' || container.tagName === 'VIDEO') {
+      observeAttrs(container);
+    }
+    if (container.querySelectorAll) {
+      container.querySelectorAll('img, video').forEach(function (el) {
+        observeAttrs(el);
+      });
+    }
+  }  // =============================================================
   // Apply / remove / toggle
   // =============================================================
   function apply() {

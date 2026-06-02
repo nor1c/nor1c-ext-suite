@@ -1,16 +1,16 @@
-(function () {
-  var currentHost = location.hostname.replace(/^www\./, '');
-  var bypassOn = false;
+﻿(function () {
+  const currentHost = location.hostname.replace(/^www\./, '');
+  let bypassOn = false;
 
   function isLikelyAdUrl(url) {
     try {
-      var u = new URL(url);
-      var host = u.hostname.replace(/^www\./, '');
-      var path = u.pathname;
+      const u = new URL(url);
+      const host = u.hostname.replace(/^www\./, '');
+      const path = u.pathname;
 
       if (host === currentHost || host.endsWith('.' + currentHost)) return false;
 
-      var KNOWN = [
+      const KNOWN = [
         'adf.ly', 'ouo.io', 'ouo.press', 'linkvertise.com',
         'sh.st', 'shorte.st', 'bc.vc', 'exe.io', 'fc.lc',
         'crn77.com', 'cr00.biz', 'cr87.biz',
@@ -18,7 +18,7 @@
         'za.gl', 'ez4short.com', 'try2link.com',
         'link1s.com', 'mlink.in', 'atglinks.com'
       ];
-      for (var i = 0; i < KNOWN.length; i++) {
+      for (let i = 0; i < KNOWN.length; i++) {
         if (host === KNOWN[i] || host.endsWith('.' + KNOWN[i])) return true;
       }
 
@@ -31,39 +31,35 @@
     }
   }
 
-  // === Page-context hook: override window.open ===
-  var script = document.createElement('script');
+  const script = document.createElement('script');
   script.textContent = '(' + function () {
-    var meta = document.createElement('meta');
+    const meta = document.createElement('meta');
     meta.name = 'nor1c-ad-bypass';
     meta.content = 'false';
     document.documentElement.appendChild(meta);
 
-    var origOpen = window.open;
+    const origOpen = window.open;
     window.open = function (url, name, features) {
-      var el = document.querySelector('meta[name="nor1c-ad-bypass"]');
+      const el = document.querySelector('meta[name="nor1c-ad-bypass"]');
       if (!el || el.content !== 'true' || !url) {
         return origOpen.apply(window, arguments);
       }
-      console.log('[Nor1c Suite] Blocked ad popup: ' + url);
       return { closed: true, close: function () {}, focus: function () {}, blur: function () {} };
     };
   } + ')();';
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 
-  // === Click handler: strip onclick from ad links ===
   document.addEventListener('click', function (e) {
     if (!bypassOn) return;
 
-    var el = e.target;
+    let el = e.target;
     while (el && el !== document.body) {
       if (el.tagName === 'A') {
-        var onclick = el.getAttribute('onclick') || '';
-        var match = onclick.match(/window\.open\s*\(\s*['"]([^'"]+)['"]/);
+        const onclick = el.getAttribute('onclick') || '';
+        const match = onclick.match(/window\.open\s*\(\s*['"]([^'"]+)['"]/);
         if (match && match[1] && isLikelyAdUrl(match[1])) {
           el.removeAttribute('onclick');
-          console.log('[Nor1c Suite] Stripped ad onclick: ' + match[1]);
           setTimeout(function () {
             try { el.setAttribute('onclick', onclick); } catch (_) {}
           }, 200);
@@ -74,16 +70,14 @@
     }
   }, true);
 
-  // === State sync (runs early at document_start) ===
   function setState(val) {
     bypassOn = !!val;
     try {
-      var meta = document.querySelector('meta[name="nor1c-ad-bypass"]');
+      const meta = document.querySelector('meta[name="nor1c-ad-bypass"]');
       if (meta) meta.content = bypassOn ? 'true' : 'false';
     } catch (_) {}
   }
 
-  // Set default immediately (ON), then confirm from storage
   setState(true);
 
   try {
