@@ -13,7 +13,7 @@
       color: #fff;
       font-weight: 700;
       font-size: 14px;
-      font-family: sans-serif;
+      font-family: 'Inter', sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
