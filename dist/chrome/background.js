@@ -1,4 +1,4 @@
-try { importScripts('background-video-downloader.js'); } catch (_) {}
+﻿try { importScripts('background-video-downloader.js'); } catch (_) {}
 
 let menusSetup = false;
 async function ensureMenus() {
@@ -8,6 +8,7 @@ async function ensureMenus() {
   chrome.contextMenus.create({ id: 'copy-link-text', title: 'Copy Link Text', contexts: ['link'] });
   chrome.contextMenus.create({ id: 'open-image-viewer', title: 'Open in Image Viewer', contexts: ['image'] });
   chrome.contextMenus.create({ id: 'save-to-png', title: 'Save to PNG', contexts: ['image'] });
+  chrome.contextMenus.create({ id: 'screenshot-fullpage', title: 'Screenshot Full Page', contexts: ['page', 'selection', 'link', 'image', 'video', 'audio'] });
 }
 ensureMenus();
 
@@ -21,9 +22,12 @@ chrome.runtime.onInstalled.addListener(() => {
     videoDownload: false,
     smoothScroll: false,
     adLinkBypass: true,
+    urlCleaner: true,
     videoControlsExcluded: [],
     hiddenRules: {},
-    elementHider: true
+    elementHider: true,
+    blockNotifications: true,
+    quickTabSwitcher: true
   });
 
   ensureMenus();
@@ -36,10 +40,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     chrome.tabs.sendMessage(tab.id, { type: 'open-image-viewer', srcUrl: info.srcUrl }).catch(() => {});
   } else if (info.menuItemId === 'save-to-png') {
     saveImageAsPng(info.srcUrl, tab).catch(() => {});
+  } else if (info.menuItemId === 'screenshot-fullpage') {
+    captureFullPage(tab).catch(() => {});
   }
 });
 
-// Auto-close tabs blocked by Brave ad blocker
 let _adBypassEnabled = true;
 chrome.storage.sync.get(['adLinkBypass'], r => { _adBypassEnabled = (r && r.adLinkBypass) !== false; });
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -83,7 +88,6 @@ async function saveImageAsPng(srcUrl, tab) {
   }
 
   const filename = getFilename(srcUrl);
-
   let pngDataUrl;
 
   if (chrome.offscreen) {
@@ -114,7 +118,6 @@ async function saveImageAsPng(srcUrl, tab) {
   }
 
   if (!pngDataUrl) return;
-
   chrome.downloads.download({ url: pngDataUrl, filename });
 }
 
@@ -137,3 +140,185 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     } catch (_) {}
   }
 });
+
+let _quickTabSwitcherEnabled = true;
+chrome.storage.sync.get(['quickTabSwitcher'], function(r) {
+  _quickTabSwitcherEnabled = r.quickTabSwitcher !== false;
+});
+chrome.storage.onChanged.addListener(function(changes, area) {
+  if (area === 'sync' && changes.quickTabSwitcher) {
+    _quickTabSwitcherEnabled = changes.quickTabSwitcher.newValue !== false;
+  }
+});
+
+chrome.commands.onCommand.addListener(async function(command) {
+  if (command !== 'switch-tab') return;
+  if (!_quickTabSwitcherEnabled) return;
+  chrome.windows.create({
+    url: 'tab-switcher.html',
+    type: 'popup',
+    width: 500,
+    height: 400,
+    focused: true
+  });
+});
+
+chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
+  if (msg.type === 'trigger-screenshot-fullpage') {
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+      if (tabs && tabs[0]) {
+        captureFullPage(tabs[0]).then(function() { sendResponse({ ok: true }); }).catch(function(err) { sendResponse({ ok: false, error: err.message }); });
+      } else {
+        sendResponse({ ok: false, error: 'No active tab' });
+      }
+    });
+    return true;
+  }
+});
+
+async function captureFullPage(tab) {
+  if (!tab || !tab.id) return;
+
+  const hostname = (function() {
+    try { return new URL(tab.url).hostname.replace(/[^a-zA-Z0-9.-]/g, '_'); }
+    catch (_) { return 'page'; }
+  })();
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  const filename = 'screenshot-' + hostname + '-' + timestamp + '.png';
+
+  let pngDataUrl;
+  if (chrome.debugger && typeof chrome.debugger.attach === 'function') {
+    pngDataUrl = await captureFullPageChrome(tab);
+  } else {
+    pngDataUrl = await captureFullPageScroll(tab);
+  }
+
+  if (!pngDataUrl) return;
+  chrome.downloads.download({ url: pngDataUrl, filename });
+}
+
+async function captureFullPageChrome(tab) {
+  const debuggee = { tabId: tab.id };
+  await chrome.debugger.attach(debuggee, '1.3');
+  try {
+    const result = await chrome.debugger.sendCommand(debuggee, 'Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: true,
+      fromSurface: true
+    });
+    return 'data:image/png;base64,' + result.data;
+  } catch (err) {
+    return null;
+  } finally {
+    await chrome.debugger.detach(debuggee).catch(function() {});
+  }
+}
+
+async function captureFullPageScroll(tab) {
+  const [dimResult] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: function() {
+      return {
+        scrollHeight: document.documentElement.scrollHeight,
+        innerHeight: window.innerHeight,
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        scrollY: window.scrollY
+      };
+    }
+  });
+
+  if (!dimResult || !dimResult.result) return null;
+
+  const dims = dimResult.result;
+  const vpHeight = dims.innerHeight;
+  const totalHeight = dims.scrollHeight;
+  const vpWidth = dims.scrollWidth || dims.innerWidth;
+  const origScrollY = dims.scrollY;
+  const steps = Math.ceil(totalHeight / vpHeight);
+
+  const slices = [];
+  for (let i = 0; i < steps; i++) {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: function(y) { window.scrollTo(0, y); },
+      args: [i * vpHeight]
+    });
+    await new Promise(function(r) { setTimeout(r, 250); });
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    slices.push(dataUrl);
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: function(y) { window.scrollTo(0, y); },
+    args: [origScrollY]
+  });
+
+  return stitchSlices(slices, vpWidth, totalHeight, vpHeight);
+}
+
+async function stitchSlices(slices, width, height, sliceHeight) {
+  const hasDOM = typeof window !== 'undefined' && window.document;
+
+  if (hasDOM) {
+    const canvas = window.document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < slices.length; i++) {
+      const img = await loadImage(slices[i]);
+      const h = Math.min(sliceHeight, height - i * sliceHeight);
+      ctx.drawImage(img, 0, i * sliceHeight, width, h);
+    }
+    return canvas.toDataURL('image/png');
+  }
+
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < slices.length; i++) {
+      const response = await fetch(slices[i]);
+      const blob = await response.blob();
+      const img = await createImageBitmap(blob);
+      const h = Math.min(sliceHeight, height - i * sliceHeight);
+      ctx.drawImage(img, 0, i * sliceHeight, width, h, 0, 0, width, h);
+      img.close();
+    }
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return new Promise(function(resolve) {
+      const reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  if (chrome.offscreen) {
+    await ensureOffscreenDocument();
+    return new Promise(function(resolve, reject) {
+      const timeout = setTimeout(function() { reject(new Error('timeout')); }, 60000);
+      chrome.runtime.sendMessage({
+        type: 'stitch-screenshots',
+        slices: slices,
+        width: width,
+        height: height,
+        sliceHeight: sliceHeight
+      }).then(function(response) {
+        clearTimeout(timeout);
+        if (response && response.dataUrl) resolve(response.dataUrl);
+        else reject(new Error('no response'));
+      }).catch(reject);
+    });
+  }
+
+  return null;
+}
+
+function loadImage(src) {
+  return new Promise(function(resolve, reject) {
+    const img = new window.Image();
+    img.onload = function() { resolve(img); };
+    img.onerror = reject;
+    img.src = src;
+  });
+}

@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const ROOT = __dirname;
@@ -18,7 +18,10 @@ const COPY_FILES = [
   'video-downloader-popup.css',
   'watcher.js',
   'convert-image.html',
-  'convert-image.js'
+  'convert-image.js',
+  'tab-switcher.html',
+  'tab-switcher.css',
+  'tab-switcher.js'
 ];
 
 const COPY_DIRS = [

@@ -1,6 +1,6 @@
 ﻿document.addEventListener('DOMContentLoaded', async () => {
-  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider', 'classBlocker'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, smoothScroll: false, elementHider: true , classBlocker: false};
+  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker'];
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, urlCleaner: true, smoothScroll: false, quickTabSwitcher: true, elementHider: true , classBlocker: false};
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -266,8 +266,24 @@
     }, 400);
   });
 
-  await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'smoothScroll', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors'];
+  document.getElementById('screenshot-fullpage-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('screenshot-fullpage-btn');
+    btn.disabled = true;
+    btn.textContent = 'Capturing...';
+    try {
+      await chrome.runtime.sendMessage({ type: 'trigger-screenshot-fullpage' });
+    } catch (err) {
+      console.error('Screenshot failed:', err);
+    }
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Capture Full Page Screenshot';
+    }, 1000);
+    window.close();
+  });
+
+    await loadHiddenElements();
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors'];
 
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await chrome.storage.sync.get(backupKeys);

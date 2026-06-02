@@ -1,4 +1,4 @@
-* {
+﻿* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -619,4 +619,21 @@ input:focus-visible + .slider {
 
 .backup-btn:active {
   transform: scale(0.97);
+}
+
+.screenshot-section-wrap {
+  padding: 0 24px;
+}
+
+.screenshot-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 0 8px;
+}
+
+#screenshot-section.picker-section {
+  border-top: none;
 }

@@ -1,4 +1,4 @@
-{
+﻿{
     "manifest_version":  3,
     "name":  "Nor1c Suite",
     "version":  "1.0.0",
@@ -8,12 +8,18 @@
                         "storage",
                         "scripting",
                         "downloads",
-                        "activeTab",
+                        "activeTab", "tabs",
                         "clipboardWrite",
                         "webRequest",
                         "declarativeNetRequest",
-                        "offscreen"
+                        "offscreen", "debugger"
                     ],
+    "commands": {
+        "switch-tab": {
+            "suggested_key": { "default": "Ctrl+Shift+K" },
+            "description": "Open quick tab switcher"
+        }
+    },
     "host_permissions":  [
                              "\u003call_urls\u003e"
                          ],
@@ -35,7 +41,7 @@
                                                 "\u003call_urls\u003e"
                                             ],
                                 "js":  [
-                                           "content/context-listener.js",
+                                           "content/notification-blocker.js", "content/context-listener.js", "content/url-cleaner.js",
                                            "content/image-blocker.js",
                                            "content/gif-blocker.js",
                                            "content/video-controls.js",
