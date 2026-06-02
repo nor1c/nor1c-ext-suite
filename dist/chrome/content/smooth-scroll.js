@@ -5,13 +5,15 @@
   let active = null;
   let style = null;
   let velocity = 0;
-  let rafId = null;
+  let loopId = null;
   let lastTime = 0;
   let scrollTarget = null;
   let currentDecay = 0.90;
   const MIN_VEL = 0.3;
   const scrollableCache = new WeakMap();
   let hasPlayingVideo = false;
+  let softLanding = null;
+  let prevMaxScroll = 0;
 
   function isScrollable(node) {
     if (scrollableCache.has(node)) return true;
@@ -63,22 +65,54 @@
     const dt = lastTime ? (now - lastTime) / 16.67 : 1;
     lastTime = now;
 
-    if (Math.abs(velocity) < MIN_VEL) {
-      velocity = 0;
-      rafId = null;
-      lastTime = 0;
-      return;
+    if (softLanding) {
+      const elapsed = now - softLanding.startTime;
+      const t = Math.min(elapsed / softLanding.duration, 1);
+      velocity = softLanding.startVel * Math.pow(1 - t, 3);
+      if (t >= 1 || Math.abs(velocity) < 0.02) {
+        velocity = 0;
+        loopId = null;
+        lastTime = 0;
+        softLanding = null;
+        prevMaxScroll = 0;
+        return;
+      }
+    } else {
+      if (Math.abs(velocity) < MIN_VEL) {
+        velocity = 0;
+        loopId = null;
+        lastTime = 0;
+        prevMaxScroll = 0;
+        return;
+      }
+      if (Math.abs(velocity) < 2.5) {
+        softLanding = { startVel: velocity, startTime: now, duration: 160 };
+      }
     }
 
     const maxScroll = getMaxScroll();
-    let next = getScrollTop() + velocity * dt;
+    const curTop = getScrollTop();
+    let next = curTop + velocity * dt;
+
+    const clampedBottom = next > maxScroll && velocity > 0;
+    const clampedTop = next < 0 && velocity < 0;
+
+    if (prevMaxScroll > 0 && maxScroll > prevMaxScroll && curTop >= prevMaxScroll - 2) {
+      next = curTop + velocity * dt;
+    }
+
     if (next < 0) next = 0;
     if (next > maxScroll) next = maxScroll;
     scrollTo(next);
+    prevMaxScroll = maxScroll;
 
-    velocity *= Math.pow(currentDecay, dt);
+    if (!softLanding) {
+      const clamped = clampedBottom || clampedTop;
+      const rate = clamped ? 1 - (1 - currentDecay) * 0.25 : currentDecay;
+      velocity *= Math.pow(rate, dt);
+    }
 
-    rafId = requestAnimationFrame(tick);
+    loopId = requestAnimationFrame(tick);
   }
 
   function isInputTarget(el) {
@@ -108,18 +142,20 @@
 
     const absDelta = Math.abs(delta);
     const intensity = Math.min(absDelta / 150, 1);
-    const scale = 0.12 + 0.63 * intensity;
+    const scale = (0.12 + 0.63 * intensity) * 0.6;
     currentDecay = 0.93 - 0.15 * intensity;
 
+    softLanding = null;
     velocity += delta * scale;
 
     const maxVel = 80;
     if (velocity > maxVel) velocity = maxVel;
     if (velocity < -maxVel) velocity = -maxVel;
 
-    if (!rafId) {
+    prevMaxScroll = 0;
+    if (!loopId) {
       lastTime = 0;
-      rafId = requestAnimationFrame(tick);
+      loopId = requestAnimationFrame(tick);
     }
     return true;
   }
@@ -133,10 +169,10 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     let delta = 0;
-    if (e.key === 'PageDown') delta = window.innerHeight * 0.85;
-    else if (e.key === 'PageUp') delta = -window.innerHeight * 0.85;
-    else if (e.key === 'ArrowDown') delta = 50;
-    else if (e.key === 'ArrowUp') delta = -50;
+    if (e.key === 'PageDown') delta = window.innerHeight * 0.51;
+    else if (e.key === 'PageUp') delta = -window.innerHeight * 0.51;
+    else if (e.key === 'ArrowDown') delta = 30;
+    else if (e.key === 'ArrowUp') delta = -30;
     else if (e.key === ' ') {
       if (hasPlayingVideo) return;
       delta = e.shiftKey ? -window.innerHeight * 0.85 : window.innerHeight * 0.85;
@@ -211,7 +247,7 @@
     removeCSS();
     window.removeEventListener('wheel', onWheel, { passive: false });
     window.removeEventListener('keydown', onKeyDown, { passive: false });
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
     velocity = 0;
     scrollTarget = null;
   }
