@@ -1,4 +1,4 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "Nor1c Suite",
   "version": "1.0.0",
@@ -45,7 +45,9 @@
         "*://*.youtube.com/*"
       ],
       "js": [
-        "content/youtube-hide-watched.js"
+        "content/youtube-hide-watched.js",
+        "content/youtube-hide-music.js",
+        "content/youtube-control-panel.js"
       ],
       "run_at": "document_start",
       "all_frames": false
@@ -65,7 +67,8 @@
         "content/element-hider.js",
         "content/location-blocker.js",
         "content/smooth-scroll.js",
-        "content/class-blocker.js"
+        "content/class-blocker.js",
+        "content/youtube-panel-overlay.js"
       ],
       "css": [
         "content/image-viewer.css"
@@ -115,7 +118,10 @@
         "lib/*",
         "assets/*",
         "watcher.js",
-        "tab-switcher.html"
+        "tab-switcher.html",
+        "youtube-control-panel.html",
+        "youtube-control-panel.css",
+        "youtube-control-panel.js"
       ],
       "matches": [
         "<all_urls>"
@@ -128,3 +134,6 @@
     "128": "icons/icon128.png"
   }
 }
+
+
+

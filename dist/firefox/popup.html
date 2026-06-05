@@ -44,6 +44,16 @@
       </div>
       <div class="toggle-card">
         <div class="toggle-info">
+          <div class="toggle-label">Hide Music YT Videos</div>
+          <div class="toggle-desc">Hide music category videos on YouTube</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="youtube-hide-music-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-card">
+        <div class="toggle-info">
           <div class="toggle-label">Video Controls</div>
           <div class="toggle-desc">Force HTML5 controls on all video players</div>
         </div>
@@ -185,9 +195,23 @@
       <input type="file" id="import-file" accept=".json" style="display:none">
     </div>
   </div>
-  <footer class="footer">
+  
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="toggle-label">YouTube Control Panel</div>
+          <div class="toggle-desc">Hide shorts, ads, comments, and customize YouTube</div>
+        </div>
+        <button id="yt-control-panel-btn" class="yt-panel-btn" title="Open settings panel">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+      </div>
+
+<footer class="footer">
     <span class="footer-text">Always active: Copy Link Text, Image Viewer, Save to PNG, Location Blocker, Notification Blocker</span>
   </footer>
   <script src="popup.js"></script>
 </body>
 </html>
+
+
+

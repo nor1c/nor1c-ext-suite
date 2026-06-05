@@ -635,3 +635,23 @@ input:focus-visible + .slider {
 #screenshot-section.picker-section {
   border-top: none;
 }
+
+
+.yt-panel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #e8f0fe;
+  color: #3b82f6;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.yt-panel-btn:hover {
+  background: #3b82f6;
+  color: #fff;
+}

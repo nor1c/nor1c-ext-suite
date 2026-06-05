@@ -16,6 +16,8 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.set({
     classBlocker: false,
     youtubeHideWatched: true,
+    youtubeHideMusic: true,
+    
     blockedSelectors: '',
     imageBlocker: false,
     gifBlocker: false,
@@ -125,7 +127,7 @@ async function saveImageAsPng(srcUrl, tab) {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'youtubeHideWatched'];
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'youtubeHideWatched', 'youtubeHideMusic'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 

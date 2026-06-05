@@ -21,7 +21,10 @@ const COPY_FILES = [
   'convert-image.js',
   'tab-switcher.html',
   'tab-switcher.css',
-  'tab-switcher.js'
+  'tab-switcher.js',
+  'youtube-control-panel.html',
+  'youtube-control-panel.css',
+  'youtube-control-panel.js'
 ];
 
 const COPY_DIRS = [
@@ -116,3 +119,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
