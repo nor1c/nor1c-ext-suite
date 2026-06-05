@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
     await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications'];
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications', 'ytControlPanel'];
 
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await chrome.storage.sync.get(backupKeys);
