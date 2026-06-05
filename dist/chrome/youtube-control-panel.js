@@ -6,6 +6,7 @@ var defaultConfig = {
   enabled: true,
   hideShorts: false,
   hideWatched: true,
+  hideMusic: true,
   hideWatchedThreshold: "85",
   hideLowViews: false,
   hideLive: true,

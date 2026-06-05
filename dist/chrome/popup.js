@@ -1,6 +1,6 @@
-﻿document.addEventListener('DOMContentLoaded', async () => {
-  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'youtubeHideWatched', 'youtubeHideMusic'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, urlCleaner: true, smoothScroll: false, quickTabSwitcher: true, elementHider: true , classBlocker: false, youtubeHideWatched: true, youtubeHideMusic: true};
+document.addEventListener('DOMContentLoaded', async () => {
+  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker'];
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, urlCleaner: true, smoothScroll: false, quickTabSwitcher: true, elementHider: true , classBlocker: false};
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -284,7 +284,7 @@
   });
 
     await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'youtubeHideWatched', 'youtubeHideMusic', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications'];
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications'];
 
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await chrome.storage.sync.get(backupKeys);

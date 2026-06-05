@@ -6,6 +6,7 @@ const defaultConfig = {
   enabled: true,
   hideShorts: false,
   hideWatched: true,
+  hideMusic: true,
   hideWatchedThreshold: "85",
   hideLive: true,
   hideUpcoming: true,
@@ -122,6 +123,17 @@ function buildCSS() {
   if (config.disableAutoplay) {
     if (DESKTOP) h('button[data-tooltip-target-id="ytp-autonav-toggle-button"]')
     if (MOBILE) h('button.ytm-autonav-toggle-button-container')
+  }
+
+  if (config.hideMusic) {
+    h('ytd-rich-item-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-video-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-compact-video-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-grid-video-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-playlist-video-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-compact-playlist-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-playlist-renderer:has(path[d*="M5.5 1.383"])')
+    h('ytd-radio-renderer:has(path[d*="M5.5 1.383"])')
   }
 
   if (config.hideAI) {

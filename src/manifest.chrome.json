@@ -45,8 +45,6 @@
         "*://*.youtube.com/*"
       ],
       "js": [
-        "content/youtube-hide-watched.js",
-        "content/youtube-hide-music.js",
         "content/youtube-control-panel.js"
       ],
       "run_at": "document_start",
