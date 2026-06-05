@@ -86,9 +86,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    const excludedResult = await chrome.storage.sync.get(['videoControlsExcluded']);
-    const excluded = excludedResult.videoControlsExcluded || [];
-    siteToggle.checked = excluded.indexOf(currentDomain) !== -1;
+    const enabledResult = await chrome.storage.sync.get(['videoControlsEnabledSites']);
+    const enabled = enabledResult.videoControlsEnabledSites || [];
+    siteToggle.checked = enabled.indexOf(currentDomain) !== -1;
     updateSiteExcludeVisibility(document.getElementById('video-controls-toggle').checked);
 
     sendTabTitle(tab.title);
@@ -116,12 +116,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   siteToggle.addEventListener('change', async e => {
     if (!currentDomain) return;
-    const res = await chrome.storage.sync.get(['videoControlsExcluded']);
-    const excluded = res.videoControlsExcluded || [];
-    const idx = excluded.indexOf(currentDomain);
-    if (e.target.checked && idx === -1) excluded.push(currentDomain);
-    else if (!e.target.checked && idx !== -1) excluded.splice(idx, 1);
-    await chrome.storage.sync.set({ videoControlsExcluded: excluded });
+    const res = await chrome.storage.sync.get(['videoControlsEnabledSites']);
+    const enabled = res.videoControlsEnabledSites || [];
+    const idx = enabled.indexOf(currentDomain);
+    if (e.target.checked && idx === -1) enabled.push(currentDomain);
+    else if (!e.target.checked && idx !== -1) enabled.splice(idx, 1);
+    await chrome.storage.sync.set({ videoControlsEnabledSites: enabled });
   });
 
   await loadSiteExclude();
@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
     await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsExcluded', 'hiddenRules', 'blockedSelectors', 'blockNotifications', 'ytControlPanel'];
+  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsEnabledSites', 'hiddenRules', 'blockedSelectors', 'blockNotifications', 'ytControlPanel'];
 
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await chrome.storage.sync.get(backupKeys);

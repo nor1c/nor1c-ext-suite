@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   let active = false;
   let observer = null;
   let walkInterval = null;
@@ -134,7 +134,7 @@
     }
   }
 
-  // Cache for liftSoundButton â€” avoid repeated getComputedStyle walks
+  // Cache for liftSoundButton — avoid repeated getComputedStyle walks
   // when the button hasn't moved in the DOM
   const liftDone = new WeakSet();
 
@@ -363,8 +363,8 @@
     return parts.slice(-2).join('.');
   }
 
-  function isExcluded(excluded, domain) {
-    return excluded.indexOf(domain) !== -1;
+  function isSiteEnabled(enabledSites, domain) {
+    return enabledSites.indexOf(domain) !== -1;
   }
 
   function start() {
@@ -386,11 +386,13 @@
   function init() {
     const domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoControlsExcluded'], function (result) {
+    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites'], function (result) {
       const enabled = result.videoControls !== undefined ? result.videoControls : false;
-      const excluded = result.videoControlsExcluded || [];
+      const enabledSites = result.videoControlsEnabledSites || [];
 
-      if (enabled && !isExcluded(excluded, domain)) {
+      if (enabled && isSiteEnabled(enabledSites, domain)) {
+        start();
+      } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
         start();
       }
     });
@@ -400,9 +402,11 @@
 
       if (changes.videoControls) {
         const enabled = changes.videoControls.newValue;
-        chrome.storage.sync.get(['videoControlsExcluded'], function (r) {
-          const excluded = r.videoControlsExcluded || [];
-          if (enabled && !isExcluded(excluded, domain)) {
+        chrome.storage.sync.get(['videoControlsEnabledSites'], function (r) {
+          const enabledSites = r.videoControlsEnabledSites || [];
+          if (enabled && isSiteEnabled(enabledSites, domain)) {
+            start();
+          } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
             start();
           } else {
             stop();
@@ -410,11 +414,13 @@
         });
       }
 
-      if (changes.videoControlsExcluded) {
-        const excluded = changes.videoControlsExcluded.newValue || [];
+      if (changes.videoControlsEnabledSites) {
+        const enabledSites = changes.videoControlsEnabledSites.newValue || [];
         chrome.storage.sync.get(['videoControls'], function (r) {
           const enabled = r.videoControls !== undefined ? r.videoControls : false;
-          if (enabled && !isExcluded(excluded, domain)) {
+          if (enabled && isSiteEnabled(enabledSites, domain)) {
+            start();
+          } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
             start();
           } else {
             stop();

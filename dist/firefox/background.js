@@ -1,4 +1,4 @@
-﻿try { importScripts('background-video-downloader.js'); } catch (_) {}
+try { importScripts('background-video-downloader.js'); } catch (_) {}
 
 let menusSetup = false;
 async function ensureMenus() {
@@ -24,7 +24,7 @@ chrome.runtime.onInstalled.addListener(() => {
     smoothScroll: false,
     adLinkBypass: true,
     urlCleaner: true,
-    videoControlsExcluded: [],
+    videoControlsEnabledSites: [],
     hiddenRules: {},
     elementHider: true,
     blockNotifications: true,
@@ -125,7 +125,7 @@ async function saveImageAsPng(srcUrl, tab) {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsExcluded', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider'];
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 
