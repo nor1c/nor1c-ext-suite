@@ -10,188 +10,102 @@
   <title>Nor1c Suite</title>
 </head>
 <body>
-  <div class="toggles">
-    <div class="toggle-section">
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Image Blocker</div>
-          <div class="toggle-desc">Block all images on every website</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="image-blocker-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">GIF Blocker</div>
-          <div class="toggle-desc">Block only GIF images</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="gif-blocker-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Video Controls</div>
-          <div class="toggle-desc">Force HTML5 controls on all video players</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="video-controls-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
-        <div class="toggle-info">
-          <div class="toggle-label" id="site-exclude-label">Enable for this site</div>
-          <div class="toggle-desc" id="site-exclude-desc"></div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="site-exclude-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Video Download</div>
-          <div class="toggle-desc">Auto-detect videos on page for download</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="video-download-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div id="video-sources-section" style="display:none; border-top: 1px solid #e8f0fe; background: #ffffff;">
-        <iframe id="video-downloader-frame" src="video-downloader-popup.html"
-          style="width:100%; height:0; border:none; border-radius:0 0 8px 8px; display:block;"></iframe>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">YouTube Control Panel</div>
-          <div class="toggle-desc">Hide shorts, ads, comments, and customize YouTube</div>
-        </div>
-        <button id="yt-control-panel-btn" class="yt-panel-btn" title="Open settings panel">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        </button>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">URL Cleaner</div>
-          <div class="toggle-desc">Strip tracking parameters from copied URLs</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="url-cleaner-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Block Tab Ads</div>
-          <div class="toggle-desc">Auto-close new tabs opened by ad links</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="ad-link-bypass-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Quick Tab Switcher</div>
-          <div class="toggle-desc">Ctrl+Shift+K to search and switch tabs</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="quick-tab-switcher-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-<div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Smooth Scroll</div>
-          <div class="toggle-desc">Smooth scrolling for mouse wheel &amp; trackpad</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="smooth-scroll-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Element Hider</div>
-          <div class="toggle-desc">Hide elements you have picked on each site</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="element-hider-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-  <div class="picker-section" id="picker-section">
-    <button id="pick-element-btn" class="pick-element-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="16"/>
-        <line x1="8" y1="12" x2="16" y2="12"/>
-      </svg>
-      Pick Element to Hide
-    </button>
-  </div>
-  <div id="hidden-elements-section" class="hidden-elements-section" style="display: none;">
-    <div class="hidden-elements-header">
-      <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
-      <button id="unhide-all-btn" class="hidden-elements-clear">Unhide All</button>
+  <div class="toggle-list">
+    <div class="toggle-card">
+      <span class="toggle-label">Image Blocker</span>
+      <label class="switch"><input type="checkbox" id="image-blocker-toggle"><span class="slider"></span></label>
     </div>
-    <div id="hidden-elements-list" class="hidden-elements-list"></div>
-    <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
+    <div class="toggle-card">
+      <span class="toggle-label">GIF Blocker</span>
+      <label class="switch"><input type="checkbox" id="gif-blocker-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Video Controls</span>
+      <label class="switch"><input type="checkbox" id="video-controls-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
+      <span class="toggle-label" id="site-exclude-label">Enable for this site</span>
+      <span class="toggle-desc" id="site-exclude-desc"></span>
+      <label class="switch"><input type="checkbox" id="site-exclude-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Video Download</span>
+      <label class="switch"><input type="checkbox" id="video-download-toggle"><span class="slider"></span></label>
+    </div>
+    <div id="video-sources-section" style="display:none;">
+      <iframe id="video-downloader-frame" src="video-downloader-popup.html" style="width:100%;height:0;border:none;display:block;"></iframe>
+    </div>
+    <div class="toggle-card toggle-card--action">
+      <span class="toggle-label">YouTube Panel</span>
+      <button id="yt-control-panel-btn" class="yt-panel-btn" title="Open settings panel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">URL Cleaner</span>
+      <label class="switch"><input type="checkbox" id="url-cleaner-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Block Tab Ads</span>
+      <label class="switch"><input type="checkbox" id="ad-link-bypass-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Tab Switcher</span>
+      <label class="switch"><input type="checkbox" id="quick-tab-switcher-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Smooth Scroll</span>
+      <label class="switch"><input type="checkbox" id="smooth-scroll-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Element Hider</span>
+      <label class="switch"><input type="checkbox" id="element-hider-toggle"><span class="slider"></span></label>
+    </div>
+    <div class="picker-section" id="picker-section">
+      <button id="pick-element-btn" class="pick-element-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        Pick Element to Hide
+      </button>
+    </div>
+    <div id="hidden-elements-section" class="hidden-elements-section" style="display: none;">
+      <div class="hidden-elements-header">
+        <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
+        <button id="unhide-all-btn" class="hidden-elements-clear">Unhide All</button>
+      </div>
+      <div id="hidden-elements-list" class="hidden-elements-list"></div>
+      <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
+    </div>
+    <div class="toggle-card">
+      <span class="toggle-label">Class Blocker</span>
+      <label class="switch"><input type="checkbox" id="class-blocker-toggle"><span class="slider"></span></label>
+    </div>
+    <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
+      <div class="blocker-input-wrap">
+        <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="2" spellcheck="false"></textarea>
+        <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
+      </div>
+    </div>
+    <div class="toggle-card toggle-card--action">
+      <span class="toggle-label">Full Page Screenshot</span>
+      <button id="screenshot-fullpage-btn" class="yt-panel-btn" title="Capture full page screenshot">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </button>
+    </div>
   </div>
-      <div class="toggle-card">
-        <div class="toggle-info">
-          <div class="toggle-label">Class Blocker</div>
-          <div class="toggle-desc">Block elements by class or ID name</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="class-blocker-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
-        <div class="blocker-input-wrap">
-          <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="3" spellcheck="false"></textarea>
-          <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
-        </div>
-      </div>
 
-    </div>
-  </div>
-  <div class="screenshot-section-wrap">
-    <div class="screenshot-section-label">Full Page Screenshot</div>
-    <div class="picker-section" id="screenshot-section">
-      <button id="screenshot-fullpage-btn" class="pick-element-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-      Capture Full Page Screenshot
-    </button>
-  </div>
-    </div>
-  </div>
-  <div class="backup-section">
-    <div class="backup-header">Settings Management</div>
-    <div class="backup-body">
-      <button id="export-btn" class="backup-btn" title="Export settings to a JSON file">Export</button>
-      <button id="import-btn" class="backup-btn" title="Import settings from a JSON file">Import</button>
+  <div class="bottom-bar">
+    <div class="backup-actions">
+      <button id="export-btn" class="backup-btn" title="Export settings">Export</button>
+      <button id="import-btn" class="backup-btn" title="Import settings">Import</button>
       <input type="file" id="import-file" accept=".json" style="display:none">
     </div>
+    <div class="footer-text">Always active: Copy Link Text, Image Viewer, Save to PNG, Location Blocker, Notification Blocker</div>
   </div>
-  
 
-<footer class="footer">
-    <span class="footer-text">Always active: Copy Link Text, Image Viewer, Save to PNG, Location Blocker, Notification Blocker</span>
-  </footer>
   <script src="popup.js"></script>
 </body>
 </html>
-
-
-

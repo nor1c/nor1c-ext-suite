@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: false, adLinkBypass: true, urlCleaner: true, smoothScroll: false, quickTabSwitcher: true, elementHider: true , classBlocker: false};
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: true, adLinkBypass: true, urlCleaner: true, smoothScroll: true, quickTabSwitcher: true, elementHider: true , classBlocker: false};
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -52,10 +52,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function startFrameResize(frame) {
     stopFrameResize();
+    const section = document.getElementById('video-sources-section');
     frameResizeTimer = setInterval(function() {
       try {
         const body = frame.contentDocument && frame.contentDocument.body;
         if (!body) return;
+        const videos = frame.contentDocument.querySelectorAll('.videos-list .video');
+        if (videos.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+        section.style.display = '';
         const h = body.scrollHeight;
         if (h > 0 && frame.style.height !== h + 'px') {
           frame.style.height = h + 'px';
@@ -270,7 +277,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('screenshot-fullpage-btn').addEventListener('click', async () => {
     const btn = document.getElementById('screenshot-fullpage-btn');
     btn.disabled = true;
-    btn.textContent = 'Capturing...';
+    btn.style.opacity = '0.5';
     try {
       await chrome.runtime.sendMessage({ type: 'trigger-screenshot-fullpage' });
     } catch (err) {
@@ -278,7 +285,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     setTimeout(() => {
       btn.disabled = false;
-      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Capture Full Page Screenshot';
+      btn.style.opacity = '';
     }, 1000);
     window.close();
   });
