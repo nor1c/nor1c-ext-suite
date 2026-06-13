@@ -274,21 +274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 400);
   });
 
-  document.getElementById('screenshot-fullpage-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('screenshot-fullpage-btn');
-    btn.disabled = true;
-    btn.style.opacity = '0.5';
-    try {
-      await chrome.runtime.sendMessage({ type: 'trigger-screenshot-fullpage' });
-    } catch (err) {
-      console.error('Screenshot failed:', err);
-    }
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.style.opacity = '';
-    }, 1000);
-    window.close();
-  });
+
 
     await loadHiddenElements();
   const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'videoControlsEnabledSites', 'hiddenRules', 'blockedSelectors', 'blockNotifications', 'ytControlPanel'];

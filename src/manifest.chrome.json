@@ -1,4 +1,4 @@
-﻿{
+{
   "manifest_version": 3,
   "name": "Nor1c Suite",
   "version": "1.0.0",
@@ -13,8 +13,7 @@
     "clipboardWrite",
     "webRequest",
     "declarativeNetRequest",
-    "offscreen",
-    "debugger"
+    "offscreen"
   ],
   "commands": {
     "switch-tab": {
