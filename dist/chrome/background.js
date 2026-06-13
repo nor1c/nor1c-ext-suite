@@ -8,7 +8,7 @@ async function ensureMenus() {
   chrome.contextMenus.create({ id: 'copy-link-text', title: 'Copy Link Text', contexts: ['link'] });
   chrome.contextMenus.create({ id: 'open-image-viewer', title: 'Open in Image Viewer', contexts: ['image'] });
   chrome.contextMenus.create({ id: 'save-to-png', title: 'Save to PNG', contexts: ['image'] });
-  chrome.contextMenus.create({ id: 'screenshot-fullpage', title: 'Screenshot Full Page', contexts: ['page', 'selection', 'link', 'image', 'video', 'audio'] });
+  chrome.contextMenus.create({ id: 'screenshot-fullpage', title: 'Screenshot Full Page', contexts: ['page', 'selection', 'image', 'video', 'audio'] });
 }
 ensureMenus();
 
