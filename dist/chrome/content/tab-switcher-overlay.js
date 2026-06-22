@@ -6,6 +6,9 @@
 
     overlayRoot = document.createElement("div");
     overlayRoot.id = "nor1c-tab-switcher-overlay";
+    overlayRoot.setAttribute("role", "dialog");
+    overlayRoot.setAttribute("aria-modal", "true");
+    overlayRoot.setAttribute("aria-label", "Quick tab switcher");
     overlayRoot.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;display:flex;align-items:center;justify-content:center;";
 
     const backdrop = document.createElement("div");
@@ -26,7 +29,7 @@
     document.body.appendChild(overlayRoot);
 
     iframe.addEventListener("load", () => {
-      iframe.contentWindow.postMessage({ type: 'focus-input' }, '*');
+      iframe.contentWindow.postMessage({ type: 'focus-input' }, chrome.runtime.getURL(''));
       iframe.contentWindow.addEventListener("keydown", (e) => {
         if (e.key === "Escape") destroyOverlay();
       });

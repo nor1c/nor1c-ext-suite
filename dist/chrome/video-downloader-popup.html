@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:;">
     <title>Video Downloader</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -272,136 +273,7 @@
         el.textContent = e.data.title;
         root.insertBefore(el, root.firstChild);
       });
-
-      (function() {
-        // Only filter out videos with no URL at all — keep "N/A" quality entries
-        // since many valid detections don't have resolution info
-        function isValidVideo(v) {
-          if (!v) return false;
-          var url = v.url || v.src || v.link || '';
-          if (!url) return false;
-          // skip blob: URLs — not downloadable
-          if (url.indexOf('blob:') === 0) return false;
-          return true;
-        }
-
-        function filterState(obj, key) {
-          if (!Array.isArray(obj[key])) return;
-          obj[key] = obj[key].filter(isValidVideo);
-        }
-
-        function deepFilter(state) {
-          if (!state || typeof state !== 'object') return;
-          for (var k in state) {
-            if (!state.hasOwnProperty(k)) continue;
-            var v = state[k];
-            if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object') {
-              var hasUrl = v[0].url || v[0].src || v[0].link;
-              if (hasUrl) {
-                filterState(state, k);
-              }
-            } else if (v && typeof v === 'object' && !Array.isArray(v)) {
-              deepFilter(v);
-            }
-          }
-        }
-
-        function hookStore() {
-          var el = document.querySelector('#app');
-          if (!el || !el.__vue__ || !el.__vue__.$store) return setTimeout(hookStore, 100);
-          var store = el.__vue__.$store;
-          var origCommit = store.commit.bind(store);
-          store.commit = function() {
-            origCommit.apply(null, arguments);
-            deepFilter(store.state);
-          };
-          var origReplaceState = store.replaceState.bind(store);
-          store.replaceState = function(s) {
-            origReplaceState(s);
-            deepFilter(store.state);
-          };
-          deepFilter(store.state);
-        }
-
-        function filterDOM() {
-          var items = document.querySelectorAll('.videos-list .video');
-          items.forEach(function(v) {
-            // only remove if no download link at all
-            var btn = v.querySelector('.download-btn');
-            if (!btn || !btn.getAttribute('href')) {
-              // check if there's any link element with a URL
-              var links = v.querySelectorAll('a[href]');
-              var hasValidLink = false;
-              for (var i = 0; i < links.length; i++) {
-                var href = links[i].href;
-                if (href && href.indexOf('blob:') !== 0) {
-                  hasValidLink = true;
-                  break;
-                }
-              }
-            }
-          });
-        }
-
-        function notifyParent(hasVideos, msg) {
-          try {
-            window.parent.postMessage({ type: 'video-detection-status', hasVideos: hasVideos, message: msg || '' }, '*');
-            // Also set direct flag (same-origin)
-            window.parent.__videoDetected = hasVideos;
-            window.parent.__videoMessage = msg || '';
-          } catch(e) {}
-        }
-
-        var lastNotified = null;
-        function checkVideoStatus() {
-          // Check Vue store directly for most reliable detection
-          var appEl = document.querySelector('#app');
-          if (appEl && appEl.__vue__ && appEl.__vue__.$store) {
-            var state = appEl.__vue__.$store.state;
-            // Walk state looking for non-empty video arrays
-            var found = false;
-            if (state && typeof state === 'object') {
-              for (var k in state) {
-                if (!state.hasOwnProperty(k)) continue;
-                var v = state[k];
-                if (Array.isArray(v) && v.length > 0 && v[0] && (v[0].url || v[0].src || v[0].link)) {
-                  found = true;
-                  break;
-                }
-              }
-            }
-            if (found) {
-              if (lastNotified !== 'found') { notifyParent(true, ''); lastNotified = 'found'; }
-              return;
-            }
-          }
-          // Fallback: check DOM
-          var videos = document.querySelectorAll('.videos-list .video');
-          if (videos.length > 0) {
-            if (lastNotified !== 'found') { notifyParent(true, ''); lastNotified = 'found'; }
-            return;
-          }
-          var msg = document.querySelector('.message');
-          if (msg) {
-            var p = msg.querySelector('p');
-            var msgText = p ? p.textContent.trim() : msg.textContent.trim();
-            if (msgText && lastNotified !== msgText) {
-              notifyParent(false, msgText);
-              lastNotified = msgText;
-            }
-          }
-        }
-
-        new MutationObserver(function() {
-          var el = document.querySelector('#app');
-          if (el && el.__vue__ && el.__vue__.$store) {
-            deepFilter(el.__vue__.$store.state);
-          }
-          checkVideoStatus();
-        }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-
-        hookStore();
-      })();
     </script>
+    <script src="content/video-downloader-filter.js"></script>
   </body>
 </html>

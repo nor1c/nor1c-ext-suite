@@ -7,6 +7,12 @@
   const volumeState = new WeakMap();
   const syncing = new WeakSet();
 
+  var autoHideEnabled = false;
+  var autoHideDelay = 3;
+  var autoHideActive = false;
+  var autoHideTimer = null;
+  var autoHideStyleEl = null;
+
   const styleEl = document.createElement('style');
   styleEl.id = 'nor1c-video-controls-force';
   styleEl.textContent = `
@@ -367,6 +373,66 @@
     return enabledSites.indexOf(domain) !== -1;
   }
 
+  function autoHideShow() {
+    if (autoHideStyleEl) { autoHideStyleEl.remove(); autoHideStyleEl = null; }
+    document.querySelectorAll('video[nor1c]').forEach(function (v) {
+      if (!v.controls) { v.controls = true; v.setAttribute('controls', 'true'); }
+    });
+  }
+
+  function autoHideHide() {
+    if (!autoHideStyleEl) {
+      autoHideStyleEl = document.createElement('style');
+      autoHideStyleEl.id = 'nor1c-video-controls-autohide';
+      autoHideStyleEl.textContent = 'video[nor1c]::-webkit-media-controls-enclosure { display: none !important; }';
+      (document.head || document.documentElement).appendChild(autoHideStyleEl);
+    }
+    document.querySelectorAll('video[nor1c]').forEach(function (v) {
+      v.controls = false; v.removeAttribute('controls');
+    });
+  }
+
+  function autoHideResetTimer() {
+    if (autoHideTimer) clearTimeout(autoHideTimer);
+    if (!autoHideEnabled) return;
+    autoHideTimer = setTimeout(autoHideHide, autoHideDelay * 1000);
+  }
+
+  function autoHideMouseMove() { autoHideShow(); autoHideResetTimer(); }
+
+  function autoHideVisibilityChange() {
+    if (document.hidden) { if (autoHideTimer) clearTimeout(autoHideTimer); autoHideHide(); }
+    else { autoHideShow(); autoHideResetTimer(); }
+  }
+
+  function autoHideVideoEnter() { autoHideShow(); autoHideResetTimer(); }
+  function autoHideVideoLeave() { autoHideHide(); }
+
+  function startAutoHide() {
+    if (!autoHideEnabled || autoHideActive) return;
+    autoHideActive = true;
+    document.addEventListener('mousemove', autoHideMouseMove, { passive: true });
+    document.addEventListener('visibilitychange', autoHideVisibilityChange);
+    document.querySelectorAll('video[nor1c]').forEach(function (v) {
+      v.addEventListener('mouseenter', autoHideVideoEnter);
+      v.addEventListener('mouseleave', autoHideVideoLeave);
+    });
+    autoHideResetTimer();
+  }
+
+  function stopAutoHide() {
+    if (!autoHideActive) return;
+    autoHideActive = false;
+    if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null; }
+    document.removeEventListener('mousemove', autoHideMouseMove);
+    document.removeEventListener('visibilitychange', autoHideVisibilityChange);
+    document.querySelectorAll('video[nor1c]').forEach(function (v) {
+      v.removeEventListener('mouseenter', autoHideVideoEnter);
+      v.removeEventListener('mouseleave', autoHideVideoLeave);
+    });
+    autoHideShow();
+  }
+
   function start() {
     if (active) return;
     active = true;
@@ -374,6 +440,7 @@
     setTimeout(walkShadowRoots, 2000);
     startObserver();
     startVideoObserver(); startOverlayPoll();
+    startAutoHide();
   }
 
   function stop() {
@@ -381,14 +448,18 @@
     active = false;
     stopObserver();
     stopVideoObserver(); stopOverlayPoll();
+    stopAutoHide();
   }
 
   function init() {
     const domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites'], function (result) {
+    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay'], function (result) {
       const enabled = result.videoControls !== undefined ? result.videoControls : false;
       const enabledSites = result.videoControlsEnabledSites || [];
+
+      autoHideEnabled = result.videoAutoHide === true;
+      autoHideDelay = typeof result.videoAutoHideDelay === 'number' ? result.videoAutoHideDelay : 3;
 
       if (enabled && isSiteEnabled(enabledSites, domain)) {
         start();
@@ -412,6 +483,17 @@
             stop();
           }
         });
+      }
+
+      if (changes.videoAutoHide) {
+        autoHideEnabled = changes.videoAutoHide.newValue === true;
+        if (autoHideEnabled && active) startAutoHide();
+        else if (!autoHideEnabled && autoHideActive) stopAutoHide();
+      }
+
+      if (changes.videoAutoHideDelay) {
+        autoHideDelay = typeof changes.videoAutoHideDelay.newValue === 'number' ? changes.videoAutoHideDelay.newValue : 3;
+        if (autoHideActive) { autoHideShow(); autoHideResetTimer(); }
       }
 
       if (changes.videoControlsEnabledSites) {

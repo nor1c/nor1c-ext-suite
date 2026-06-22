@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STYLE_ID = 'nor1c-gif-blocker-style';
   const CSS = `
     img[src$=".gif"],
@@ -30,6 +30,19 @@
   let observer = null;
   let style = null;
   const hiddenEls = new WeakSet();
+  let gifBlockedCount = 0;
+  let gifBadgeTimer = null;
+
+  function reportGifBadge() {
+    if (gifBadgeTimer) return;
+    gifBadgeTimer = setTimeout(() => {
+      gifBadgeTimer = null;
+      if (gifBlockedCount > 0) {
+        chrome.runtime.sendMessage({ type: 'badge-count', count: gifBlockedCount }).catch(() => {});
+        gifBlockedCount = 0;
+      }
+    }, 1000);
+  }
 
   // =============================================================
   // Detect <img> elements with .gif in attributes
@@ -164,6 +177,8 @@
     el.style.setProperty('visibility', 'hidden', 'important');
     el.style.setProperty('opacity', '0', 'important');
     hiddenEls.add(el);
+    gifBlockedCount++;
+    reportGifBadge();
   }
 
   function showElement(el) {
@@ -201,14 +216,6 @@
   let childListObserver = null;
   let attrsObserver = null;
 
-  function observeAttrs(el) {
-    if (!attrsObserver) return;
-    attrsObserver.observe(el, {
-      attributes: true,
-      attributeFilter: ['src', 'data-src', 'data-lazy-src', 'alt', 'title', 'aria-label']
-    });
-  }
-
   function startObserver() {
     if (childListObserver) return;
 
@@ -243,11 +250,10 @@
     });
 
     attrsObserver = new MutationObserver(attrsHandler);
-    document.querySelectorAll('img, video').forEach(function (el) {
-      attrsObserver.observe(el, {
-        attributes: true,
-        attributeFilter: ['src', 'data-src', 'data-lazy-src', 'alt', 'title', 'aria-label']
-      });
+    attrsObserver.observe(document.documentElement, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src', 'data-src', 'data-lazy-src', 'alt', 'title', 'aria-label']
     });
   }
 
@@ -264,12 +270,9 @@
 
   function hideImagesAndWatch(container) {
     hideImages(container);
-    if (container.tagName === 'IMG' || container.tagName === 'VIDEO') {
-      observeAttrs(container);
-    }
     if (container.querySelectorAll) {
       container.querySelectorAll('img, video').forEach(function (el) {
-        observeAttrs(el);
+        hideImages(el);
       });
     }
   }  // =============================================================

@@ -554,6 +554,7 @@ function onStorageChanged(changes, area) {
 }
 
 window.addEventListener('message', function(event) {
+  if (event.origin !== chrome.runtime.getURL('').replace(/\/$/, '')) return;
   if (event.data && event.data.type === 'yt-panel-config') applyConfig(event.data.config)
 })
 
@@ -629,6 +630,7 @@ if (document.readyState === 'loading') {
   })
 
   window.addEventListener('message', function(e) {
+    if (e.origin !== chrome.runtime.getURL('').replace(/\/$/, '')) return;
     if (e.data && e.data.type === 'yt-panel-config') applyJS(e.data.config)
   })
 })()

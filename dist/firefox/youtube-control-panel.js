@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
 
 var STORAGE_KEY = "ytControlPanel"
 
@@ -123,7 +123,7 @@ function saveConfig() {
   var data = {}
   data[STORAGE_KEY] = cfg
   chrome.storage.sync.set(data)
-  window.parent.postMessage({ type: "yt-panel-config", config: cfg }, "*")
+  window.parent.postMessage({ type: "yt-panel-config", config: cfg }, chrome.runtime.getURL(""))
 }
 
 function resetConfig() {
@@ -137,7 +137,7 @@ function resetConfig() {
   var data = {}
   data[STORAGE_KEY] = defaultConfig
   chrome.storage.sync.set(data)
-  window.parent.postMessage({ type: "yt-panel-config", config: defaultConfig }, "*")
+  window.parent.postMessage({ type: "yt-panel-config", config: defaultConfig }, chrome.runtime.getURL(""))
   updateRanges()
 }
 
@@ -182,6 +182,38 @@ document.addEventListener("DOMContentLoaded", function() {
   var rangeInputs = document.querySelectorAll('input[type="range"]')
   for (var k = 0; k < rangeInputs.length; k++) {
     rangeInputs[k].addEventListener("input", updateRanges)
+  }
+
+  var searchInput = document.getElementById("settings-search")
+  if (searchInput) {
+    searchInput.addEventListener("input", function() {
+      var query = this.value.trim().toLowerCase()
+      var rows = document.querySelectorAll(".row")
+      var panels = document.querySelectorAll(".tab-panel")
+      if (!query) {
+        rows.forEach(function(r) { r.classList.remove("search-hidden") })
+        panels.forEach(function(p) { p.style.display = "" })
+        return
+      }
+      var tabsWithMatches = new Set()
+      rows.forEach(function(row) {
+        var title = row.querySelector(".row-title")
+        if (!title) return
+        var match = title.textContent.toLowerCase().indexOf(query) !== -1
+        row.classList.toggle("search-hidden", !match)
+        if (match) {
+          var panel = row.closest(".tab-panel")
+          if (panel) tabsWithMatches.add(panel.id)
+        }
+      })
+      panels.forEach(function(p) {
+        p.style.display = tabsWithMatches.has(p.id) ? "" : "none"
+      })
+      if (tabsWithMatches.size === 1) {
+        var tabId = tabsWithMatches.values().next().value.replace("tab-", "")
+        switchTab(tabId)
+      }
+    })
   }
 })
 

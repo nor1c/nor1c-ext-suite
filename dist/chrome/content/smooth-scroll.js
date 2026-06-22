@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STYLE_ID = 'nor1c-smooth-scroll-style';
   const CSS = 'html { scroll-behavior: smooth !important; }';
 
@@ -10,12 +10,18 @@
   let scrollTarget = null;
   let currentDecay = 0.90;
   const MIN_VEL = 0.3;
-  const scrollableCache = new WeakMap();
+  const CACHE_TTL = 30000;
+  let scrollableCache = new WeakMap();
+  let cacheResetTime = Date.now();
   let hasPlayingVideo = false;
   let softLanding = null;
   let prevMaxScroll = 0;
 
   function isScrollable(node) {
+    if (Date.now() - cacheResetTime > CACHE_TTL) {
+      scrollableCache = new WeakMap();
+      cacheResetTime = Date.now();
+    }
     if (scrollableCache.has(node)) return true;
     if (node.scrollHeight <= node.clientHeight + 1) return false;
     const ov = window.getComputedStyle(node).overflowY;
@@ -215,9 +221,10 @@
           return;
         }
       }
-      const all = root.querySelectorAll('*');
-      for (let i = 0; i < all.length; i++) {
-        if (all[i].shadowRoot && !hasPlayingVideo) walk(all[i].shadowRoot);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.shadowRoot && !hasPlayingVideo) walk(node.shadowRoot);
       }
     }
     walk(document);
@@ -257,12 +264,14 @@
     if (active) apply(); else remove();
   }
 
-  setupVideoTracking();
-
   chrome.storage.sync.get(['smoothScroll'], (result) => {
     const val = result.smoothScroll === true;
     active = val;
-    if (val) apply();
+    if (val) {
+      apply();
+      var idle = window.requestIdleCallback || function(fn) { return setTimeout(fn, 1); };
+      idle(function() { setupVideoTracking(); });
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {

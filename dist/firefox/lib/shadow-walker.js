@@ -8,12 +8,13 @@ function walkShadowDOM(root, selector, callback) {
   const nodes = root.querySelectorAll(selector);
   nodes.forEach((el) => callback(el));
 
-  const allElements = root.querySelectorAll('*');
-  allElements.forEach((el) => {
-    if (el.shadowRoot) {
-      walkShadowDOM(el.shadowRoot, selector, callback);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.shadowRoot) {
+      walkShadowDOM(node.shadowRoot, selector, callback);
     }
-  });
+  }
 }
 
 /**

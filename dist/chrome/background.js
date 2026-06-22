@@ -1,5 +1,38 @@
 try { importScripts('background-video-downloader.js'); } catch (_) {}
 
+const badgeCounts = {};
+
+function updateBadge(tabId) {
+  const count = badgeCounts[tabId] || 0;
+  const text = count > 0 ? (count > 99 ? '99+' : String(count)) : '';
+  chrome.action.setBadgeText({ text, tabId }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ color: '#3b82f6', tabId }).catch(() => {});
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'badge-count' && sender.tab && sender.tab.id) {
+    const tabId = sender.tab.id;
+    badgeCounts[tabId] = (badgeCounts[tabId] || 0) + (msg.count || 1);
+    updateBadge(tabId);
+  }
+  if (msg.type === 'get-playing-videos') {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      if (!tabs || !tabs[0] || !tabs[0].id) {
+        sendResponse({ playing: [] });
+        return;
+      }
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'get-playing-videos' }, function (response) {
+        sendResponse(response || { playing: [] });
+      });
+    });
+    return true;
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  delete badgeCounts[tabId];
+});
+
 let menusSetup = false;
 async function ensureMenus() {
   if (menusSetup) return;
@@ -27,7 +60,11 @@ chrome.runtime.onInstalled.addListener(() => {
     hiddenRules: {},
     elementHider: true,
     blockNotifications: true,
-    quickTabSwitcher: true
+    quickTabSwitcher: true,
+    cookieConsent: true,
+    disableAnimations: false,
+    videoAutoHide: false,
+    videoAutoHideDelay: 3
   });
 
   ensureMenus();
@@ -40,19 +77,17 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     chrome.tabs.sendMessage(tab.id, { type: 'open-image-viewer', srcUrl: info.srcUrl }).catch(() => {});
   } else if (info.menuItemId === 'save-to-png') {
     saveImageAsPng(info.srcUrl, tab).catch(() => {});
-  } else if (info.menuItemId === 'screenshot-fullpage') {
-    captureFullPage(tab).catch(() => {});
   }
 });
 
-let _adBypassEnabled = true;
+let _adBypassEnabled = null;
 chrome.storage.sync.get(['adLinkBypass'], r => { _adBypassEnabled = (r && r.adLinkBypass) !== false; });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.adLinkBypass) _adBypassEnabled = changes.adLinkBypass.newValue !== false;
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!_adBypassEnabled) return;
+  if (_adBypassEnabled === false) return;
   if (changeInfo.title && /domain blocked/i.test(changeInfo.title)) {
     chrome.tabs.remove(tabId).catch(() => {});
   }
@@ -124,7 +159,7 @@ async function saveImageAsPng(srcUrl, tab) {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider'];
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'cookieConsent', 'disableAnimations'];
   const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
   if (!changedKey) return;
 
@@ -141,12 +176,12 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   }
 });
 
-let _quickTabSwitcherEnabled = true;
+let _quickTabSwitcherEnabled = null;
 chrome.storage.sync.get(['quickTabSwitcher'], function(r) {
   _quickTabSwitcherEnabled = r.quickTabSwitcher !== false;
 });
 async function openTabSwitcher() {
-  if (!_quickTabSwitcherEnabled) return;
+  if (_quickTabSwitcherEnabled === false) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && tab.id) {

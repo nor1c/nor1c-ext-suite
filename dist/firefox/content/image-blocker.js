@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STYLE_ID = 'nor1c-image-blocker-style';
   const WRAPPER_CLASS = 'nor1c-img-blocked-wrapper';
   const OVERLAY_CLASS = 'nor1c-img-blocked-overlay';
@@ -17,7 +17,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2147483647;
+      z-index: 2147483643;
       pointer-events: none;
       user-select: none;
     }
@@ -37,6 +37,19 @@
   let active = null;
   let observer = null;
   let style = null;
+  let blockedCount = 0;
+  let badgeTimer = null;
+
+  function reportBadge() {
+    if (badgeTimer) return;
+    badgeTimer = setTimeout(() => {
+      badgeTimer = null;
+      if (blockedCount > 0) {
+        chrome.runtime.sendMessage({ type: 'badge-count', count: blockedCount }).catch(() => {});
+        blockedCount = 0;
+      }
+    }, 1000);
+  }
   const processedEls = new WeakSet();
   const bgProcessedEls = new WeakSet();
 
@@ -97,6 +110,8 @@
 
     el.style.setProperty('opacity', '0', 'important');
     el.style.setProperty('visibility', 'hidden', 'important');
+    blockedCount++;
+    reportBadge();
   }
 
   function blockBgContainer(el) {

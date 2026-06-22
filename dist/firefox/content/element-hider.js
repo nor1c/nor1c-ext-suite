@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
   const RANDOM_ID_RE = /^(css-[a-z0-9]+|jss\d+|_[a-zA-Z0-9]{5,}|radix-|headlessui-|makeStyles-\w+|Component_\w+|sc-\w+|styled-\w+|emotion-\w+)/;
   const SEMANTIC_TAGS = new Set(['main', 'header', 'footer', 'nav', 'article', 'section', 'aside', 'form']);
   const UNSTABLE_CLASS_RE = /css-[a-z0-9]+|jss\d+|_[a-zA-Z0-9]{5,}|makeStyles-\w+|Component_\w+|sc-\w+|styled-\w+|emotion-\w+/;
@@ -39,7 +39,7 @@
     chrome.storage.sync.get(['hiddenRules', 'elementHider'], result => {
       elementHiderEnabled = result.elementHider !== false;
       const rules = result.hiddenRules || {};
-      const domain = getDomain();
+      const domain = nor1cGetDomain();
       const path = getPathname();
       const domainRules = rules[domain] || [];
       cachedDomainRules = domainRules.filter(r => pathsMatch(r.path, path));
@@ -115,12 +115,6 @@
     return text.substring(0, 80);
   }
 
-  function getDomain() {
-    const parts = location.hostname.split('.');
-    if (parts.length <= 2) return location.hostname;
-    return parts.slice(-2).join('.');
-  }
-
   function getPathname() {
     return location.pathname.replace(/\/+$/, '') || '/';
   }
@@ -141,7 +135,7 @@
       }
       .nor1c-eh-label {
         position: fixed;
-        z-index: 2147483647;
+        z-index: 2147483645;
         background: #1e3a5f;
         color: #fff;
         font: 11px/1.4 Inter, -apple-system, sans-serif;
@@ -159,7 +153,7 @@
         top: 12px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 2147483647;
+        z-index: 2147483645;
         background: #ef4444;
         color: #fff;
         font: 600 13px/1 Inter, -apple-system, sans-serif;
@@ -243,7 +237,7 @@
 
     const selector = buildStructuralSelector(el);
     const contentHint = buildContentHint(el);
-    const domain = getDomain();
+    const domain = nor1cGetDomain();
     const rule = { id: uuid(), selector, contentHint, path: getPathname(), createdAt: Date.now() };
 
     chrome.storage.sync.get(['hiddenRules'], result => {
@@ -257,6 +251,7 @@
         setTimeout(() => {
           el.classList.remove('nor1c-eh-flash');
           el.style.setProperty('display', 'none', 'important');
+          showUndoToast(domain, rule.id, el);
         }, 400);
         // restore iframe pointer-events if needed
         if (el.tagName === 'IFRAME' && iframeOverride === el) {
@@ -267,6 +262,46 @@
         if (lastHovered === el) lastHovered = null;
       });
     });
+  }
+
+  function showUndoToast(domain, ruleId, hiddenEl) {
+    const existing = document.getElementById('nor1c-eh-undo-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'nor1c-eh-undo-toast';
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#1f2937;color:#fff;padding:10px 16px;border-radius:8px;font:500 13px Inter,sans-serif;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);pointer-events:auto;';
+
+    const msg = document.createElement('span');
+    msg.textContent = 'Element hidden';
+
+    const undoBtn = document.createElement('button');
+    undoBtn.textContent = 'Undo';
+    undoBtn.style.cssText = 'background:#3b82f6;color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font:600 12px Inter,sans-serif;';
+    undoBtn.addEventListener('click', () => {
+      chrome.storage.sync.get(['hiddenRules'], result => {
+        const rules = result.hiddenRules || {};
+        if (rules[domain]) {
+          rules[domain] = rules[domain].filter(r => r.id !== ruleId);
+          if (rules[domain].length === 0) delete rules[domain];
+          chrome.storage.sync.set({ hiddenRules: rules });
+        }
+      });
+      hiddenEl.style.removeProperty('display');
+      toast.remove();
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = 'background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 2px;';
+    closeBtn.addEventListener('click', () => toast.remove());
+
+    toast.appendChild(msg);
+    toast.appendChild(undoBtn);
+    toast.appendChild(closeBtn);
+    document.body.appendChild(toast);
+
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
   }
 
   function onPickerKeyDown(e) {

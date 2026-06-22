@@ -1,5 +1,6 @@
 ﻿(function () {
-  const reportedUrls = {};
+  const reportedUrls = new Set();
+  const MAX_REPORTED = 500;
 
   function getVideoSrc(video) {
     const src = video.currentSrc || video.src || '';
@@ -10,8 +11,12 @@
   function reportVideoSrc(video) {
     const src = getVideoSrc(video);
     if (!src) return;
-    if (reportedUrls[src]) return;
-    reportedUrls[src] = true;
+    if (reportedUrls.has(src)) return;
+    if (reportedUrls.size >= MAX_REPORTED) {
+      const first = reportedUrls.values().next().value;
+      reportedUrls.delete(first);
+    }
+    reportedUrls.add(src);
 
     let fileName = '';
     try {

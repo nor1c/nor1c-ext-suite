@@ -14,12 +14,17 @@
     if (overlay) return;
     overlay = document.createElement('div');
     overlay.className = 'nor1c-viewer-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Image viewer');
 
     img = document.createElement('img');
+    img.setAttribute('alt', 'Viewed image');
     overlay.appendChild(img);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'nor1c-viewer-close';
+    closeBtn.setAttribute('aria-label', 'Close image viewer');
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
     closeBtn.addEventListener('click', closeViewer);
     overlay.appendChild(closeBtn);
@@ -95,6 +100,7 @@
     scale = 1;
     translateX = 0;
     translateY = 0;
+    document.removeEventListener('keydown', onKeyDown);
   }
 
   function onMouseDown(e) {
