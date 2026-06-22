@@ -1,4 +1,4 @@
-﻿{
+{
   "manifest_version": 3,
   "name": "Nor1c Suite",
   "version": "1.0.0",
@@ -60,6 +60,7 @@
         "<all_urls>"
       ],
       "js": [
+        "lib/utils.js",
         "content/notification-blocker.js",
         "content/context-listener.js",
         "content/url-cleaner.js",
@@ -72,13 +73,25 @@
         "content/location-blocker.js",
         "content/smooth-scroll.js",
         "content/class-blocker.js",
-        "content/youtube-panel-overlay.js"
+        "content/disable-animations.js",
+        "content/cookie-consent.js"
       ],
       "css": [
         "content/image-viewer.css"
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "*://www.youtube.com/*",
+        "*://m.youtube.com/*"
+      ],
+      "js": [
+        "content/youtube-panel-overlay.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": false
     },
     {
       "all_frames": true,
@@ -88,7 +101,8 @@
       ],
       "js": [
         "content/video-play-reset.js",
-        "content/video-downloader-inject.js"
+        "content/video-downloader-inject.js",
+        "content/video-playing-tracker.js"
       ],
       "matches": [
         "<all_urls>"
