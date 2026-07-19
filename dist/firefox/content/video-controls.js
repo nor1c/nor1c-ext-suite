@@ -3,9 +3,12 @@
   let observer = null;
   let walkInterval = null;
   const timestamps = new WeakMap();
-  const overlaysDone = new WeakSet();
-  const volumeState = new WeakMap();
+  let overlaysDone = new WeakSet();
+  let volumeState = new WeakMap();
   const syncing = new WeakSet();
+  const originalVideoState = new Map();
+  const originalElementStyles = new Map();
+  const mutedObservers = new Map();
 
   var autoHideEnabled = false;
   var autoHideDelay = 3;
@@ -44,10 +47,15 @@
     (document.head || document.documentElement).appendChild(styleEl);
   }
 
+  function rememberStyles(element) {
+    if (!originalElementStyles.has(element)) originalElementStyles.set(element, element.getAttribute('style'));
+  }
+
   function liftStackingContexts(video) {
     let el = video.parentElement;
     while (el && el !== document.documentElement) {
       const cs = getComputedStyle(el);
+      rememberStyles(el);
       if (cs.position !== 'static') {
         el.style.setProperty('z-index', '2147483647', 'important');
         break;
@@ -60,6 +68,7 @@
   function nukeOverlay(container) {
     if (overlaysDone.has(container)) return;
     overlaysDone.add(container);
+    rememberStyles(container);
     container.style.setProperty('pointer-events', 'none', 'important');
   }
 
@@ -102,12 +111,14 @@
     const limit = video.closest('article, [role="dialog"], main, section') || document.documentElement;
     let el = btn;
     while (el && el !== limit) {
+      rememberStyles(el);
       el.style.setProperty('z-index', '2147483647', 'important');
       if (getComputedStyle(el).position === 'static') {
         el.style.setProperty('position', 'relative', 'important');
       }
       el = el.parentElement;
     }
+    rememberStyles(btn);
     btn.style.setProperty('z-index', '2147483647', 'important');
   }
 
@@ -124,6 +135,7 @@
       if (overlay) {
         nukeOverlay(overlay);
         overlay.querySelectorAll('[role="button"],[tabindex],button').forEach(function (c) {
+          rememberStyles(c);
           c.style.setProperty('pointer-events', 'none', 'important');
         });
         return;
@@ -133,6 +145,7 @@
       if (overlay) {
         nukeOverlay(overlay);
         overlay.querySelectorAll('[role="button"],[tabindex],button').forEach(function (c) {
+          rememberStyles(c);
           c.style.setProperty('pointer-events', 'none', 'important');
         });
         return;
@@ -152,6 +165,14 @@
     if (now - last < 250) return;
     timestamps.set(video, now);
 
+    if (!originalVideoState.has(video)) {
+      originalVideoState.set(video, {
+        controls: video.hasAttribute('controls'),
+        controlsList: video.getAttribute('controlsList'),
+        nor1c: video.hasAttribute('nor1c'),
+        style: video.getAttribute('style')
+      });
+    }
     if (!video.hasAttribute('controls')) {
       video.setAttribute('controls', 'true');
       video.controls = true;
@@ -176,15 +197,16 @@
     const nativeVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
     volumeState.set(video, { muted: video.muted, volume: video.volume });
 
-    const _muted = video.muted;
+    let muted = video.muted;
 
     Object.defineProperty(video, 'muted', {
-      get: function () { return _muted; },
+      get: function () { return nativeMutedDesc.get.call(video); },
       set: function (val) {
-        let prev = _muted;
-        _muted = val;
-        volumeState.set(video, { muted: val, volume: video.volume });
-        if (prev !== val && !syncing.has(video)) syncInstagramButton(video);
+        const previous = nativeMutedDesc.get.call(video);
+        nativeMutedDesc.set.call(video, val);
+        muted = nativeMutedDesc.get.call(video);
+        volumeState.set(video, { muted, volume: video.volume });
+        if (previous !== muted && !syncing.has(video)) syncInstagramButton(video);
       },
       configurable: true
     });
@@ -193,20 +215,20 @@
       get: function () { return nativeVolumeDesc.get.call(video); },
       set: function (val) {
         nativeVolumeDesc.set.call(video, val);
-        volumeState.set(video, { muted: _muted, volume: val });
+        volumeState.set(video, { muted, volume: val });
       },
       configurable: true
     });
 
     video.addEventListener('volumechange', function () {
-      _muted = nativeMutedDesc.get.call(video);
-      volumeState.set(video, { muted: _muted, volume: nativeVolumeDesc.get.call(video) });
+      muted = nativeMutedDesc.get.call(video);
+      volumeState.set(video, { muted, volume: nativeVolumeDesc.get.call(video) });
     });
 
     video.addEventListener('seeking', function () {
       const saved = volumeState.get(video);
       if (saved) {
-        _muted = saved.muted;
+        muted = saved.muted;
         nativeMutedDesc.set.call(video, saved.muted);
         nativeVolumeDesc.set.call(video, saved.volume);
         syncInstagramButton(video);
@@ -216,7 +238,7 @@
     video.addEventListener('playing', function () {
       const saved = volumeState.get(video);
       if (saved) {
-        _muted = saved.muted;
+        muted = saved.muted;
         nativeMutedDesc.set.call(video, saved.muted);
         nativeVolumeDesc.set.call(video, saved.volume);
       }
@@ -230,6 +252,7 @@
       }
     });
     mutedObs.observe(video, { attributes: true, attributeFilter: ['muted'] });
+    mutedObservers.set(video, mutedObs);
   }
 
   function processAll() {
@@ -251,6 +274,7 @@
             if (node.matches && node.matches('[aria-label="Video player"],[role="group"][data-visualcompletion="ignore"]')) {
               nukeOverlay(node);
               node.querySelectorAll('[role="button"],[tabindex],button').forEach(function (c) {
+                rememberStyles(c);
                 c.style.setProperty('pointer-events', 'none', 'important');
               });
             }
@@ -259,6 +283,7 @@
               overlays.forEach(function (o) {
                 nukeOverlay(o);
                 o.querySelectorAll('[role="button"],[tabindex],button').forEach(function (c) {
+                  rememberStyles(c);
                   c.style.setProperty('pointer-events', 'none', 'important');
                 });
               });
@@ -363,10 +388,7 @@
     }
   }
   function getDomain() {
-    const h = location.hostname;
-    const parts = h.split('.');
-    if (parts.length <= 2) return h;
-    return parts.slice(-2).join('.');
+    return nor1cGetDomain();
   }
 
   function isSiteEnabled(enabledSites, domain) {
@@ -443,12 +465,36 @@
     startAutoHide();
   }
 
+  function restoreElement(element, style) {
+    if (style === null) element.removeAttribute('style');
+    else element.setAttribute('style', style);
+  }
+
   function stop() {
     if (!active) return;
     active = false;
     stopObserver();
     stopVideoObserver(); stopOverlayPoll();
     stopAutoHide();
+    for (const [video, state] of originalVideoState) {
+      const mutedObserver = mutedObservers.get(video);
+      if (mutedObserver) mutedObserver.disconnect();
+      delete video.muted;
+      delete video.volume;
+      if (state.controls) video.setAttribute('controls', '');
+      else video.removeAttribute('controls');
+      if (state.controlsList === null) video.removeAttribute('controlsList');
+      else video.setAttribute('controlsList', state.controlsList);
+      if (!state.nor1c) video.removeAttribute('nor1c');
+      restoreElement(video, state.style);
+    }
+    for (const [element, style] of originalElementStyles) restoreElement(element, style);
+    originalVideoState.clear();
+    originalElementStyles.clear();
+    mutedObservers.clear();
+    volumeState = new WeakMap();
+    overlaysDone = new WeakSet();
+    styleEl.remove();
   }
 
   function init() {
@@ -461,11 +507,7 @@
       autoHideEnabled = result.videoAutoHide === true;
       autoHideDelay = typeof result.videoAutoHideDelay === 'number' ? result.videoAutoHideDelay : 3;
 
-      if (enabled && isSiteEnabled(enabledSites, domain)) {
-        start();
-      } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
-        start();
-      }
+      if (enabled && isSiteEnabled(enabledSites, domain)) start();
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -475,13 +517,8 @@
         const enabled = changes.videoControls.newValue;
         chrome.storage.sync.get(['videoControlsEnabledSites'], function (r) {
           const enabledSites = r.videoControlsEnabledSites || [];
-          if (enabled && isSiteEnabled(enabledSites, domain)) {
-            start();
-          } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
-            start();
-          } else {
-            stop();
-          }
+          if (enabled && isSiteEnabled(enabledSites, domain)) start();
+          else stop();
         });
       }
 
@@ -500,13 +537,8 @@
         const enabledSites = changes.videoControlsEnabledSites.newValue || [];
         chrome.storage.sync.get(['videoControls'], function (r) {
           const enabled = r.videoControls !== undefined ? r.videoControls : false;
-          if (enabled && isSiteEnabled(enabledSites, domain)) {
-            start();
-          } else if (!enabled && enabledSites.indexOf(domain) !== -1) {
-            start();
-          } else {
-            stop();
-          }
+          if (enabled && isSiteEnabled(enabledSites, domain)) start();
+          else stop();
         });
       }
     });

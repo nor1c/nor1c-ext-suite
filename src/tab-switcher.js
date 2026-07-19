@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
   const searchInput = document.getElementById('search-input');
   const tabList = document.getElementById('tab-list');
   const noResults = document.getElementById('no-results');
@@ -6,7 +6,7 @@
 
   function closeSwitcher() {
     if (window !== window.top) {
-      window.parent.postMessage({ type: 'close-tab-switcher' }, '*');
+      window.parent.postMessage({ type: 'close-tab-switcher' }, chrome.runtime.getURL(''));
     } else {
       window.close();
     }
@@ -16,6 +16,7 @@
   let allTabs = [];
   let filteredTabs = [];
   let selectedIndex = 0;
+  let renderRafId = null;
 
   async function loadTabs() {
     const tabs = await chrome.tabs.query({});
@@ -65,7 +66,8 @@
       return fuzzyMatch(tab.title + ' ' + tab.url + ' ' + tab.hostname, query);
     });
     selectedIndex = 0;
-    render();
+    if (renderRafId) cancelAnimationFrame(renderRafId);
+    renderRafId = requestAnimationFrame(render);
   }
 
   function render() {
@@ -84,6 +86,7 @@
         const img = document.createElement('img');
         img.className = 'tab-favicon';
         img.src = tab.favIconUrl;
+        img.alt = '';
         img.onerror = function() { img.style.display = 'none'; };
         row.appendChild(img);
       } else {

@@ -1,5 +1,5 @@
 (function () {
-  var playingVideos = new Set();
+  var trackedSources = new WeakMap();
 
   function getVideoSrc(video) {
     return video.currentSrc || video.src || '';
@@ -7,12 +7,17 @@
 
   function updatePlaying(video) {
     var src = getVideoSrc(video);
-    if (!src) return;
-    if (!video.paused && !video.ended && video.readyState > 2) {
-      playingVideos.add(src);
-    } else {
-      playingVideos.delete(src);
-    }
+    if (src) trackedSources.set(video, src);
+  }
+
+  function getPlayingUrls() {
+    var urls = [];
+    document.querySelectorAll('video').forEach(function(video) {
+      updatePlaying(video);
+      var src = trackedSources.get(video);
+      if (src && !video.paused && !video.ended && video.readyState > 2) urls.push(src);
+    });
+    return Array.from(new Set(urls));
   }
 
   function hookVideo(video) {
@@ -53,7 +58,7 @@
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     if (msg && msg.type === 'get-playing-videos') {
       scanVideos();
-      sendResponse({ playing: Array.from(playingVideos) });
+      sendResponse({ playing: getPlayingUrls() });
       return true;
     }
   });

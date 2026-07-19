@@ -170,7 +170,7 @@
   // --- HD Image Detection ---
 
   async function detectHD(srcUrl) {
-    const parentHdUrl = findParentLinkHD();
+    const parentHdUrl = findParentLinkHD(srcUrl);
     if (parentHdUrl) return parentHdUrl;
 
     const patternHdUrl = tryPatternTransform(srcUrl);
@@ -182,22 +182,20 @@
     return srcUrl;
   }
 
-  function findParentLinkHD() {
-    const allImages = document.querySelectorAll('img');
-    for (const imgEl of allImages) {
-      if (imgEl.naturalWidth === 0 && imgEl.naturalHeight === 0) continue;
-      let parent = imgEl.parentElement;
-      while (parent && parent !== document.body) {
-        if (parent.tagName === 'A' && parent.href) {
-          const href = parent.href;
-          if (
-            /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(href)
-          ) {
-            return href;
-          }
-        }
-        parent = parent.parentElement;
+  function findParentLinkHD(srcUrl) {
+    const images = document.querySelectorAll('img');
+    let target = null;
+    for (const image of images) {
+      if (image.currentSrc === srcUrl || image.src === srcUrl) {
+        target = image;
+        break;
       }
+    }
+    if (!target) return null;
+    let parent = target.parentElement;
+    while (parent && parent !== document.body) {
+      if (parent.tagName === 'A' && parent.href && /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(parent.href)) return parent.href;
+      parent = parent.parentElement;
     }
     return null;
   }

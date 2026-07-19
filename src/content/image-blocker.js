@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STYLE_ID = 'nor1c-image-blocker-style';
   const WRAPPER_CLASS = 'nor1c-img-blocked-wrapper';
   const OVERLAY_CLASS = 'nor1c-img-blocked-overlay';
@@ -17,7 +17,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 2147483647;
+      z-index: 2147483643;
       pointer-events: none;
       user-select: none;
     }
@@ -37,8 +37,22 @@
   let active = null;
   let observer = null;
   let style = null;
-  const processedEls = new WeakSet();
-  const bgProcessedEls = new WeakSet();
+  let blockedCount = 0;
+  const blockedImages = new Set();
+  let badgeTimer = null;
+
+  function reportBadge() {
+    if (badgeTimer) return;
+    badgeTimer = setTimeout(() => {
+      badgeTimer = null;
+      if (blockedCount > 0) {
+        chrome.runtime.sendMessage({ type: 'badge-count', feature: 'image', count: blockedImages.size }).catch(() => {});
+        blockedCount = 0;
+      }
+    }, 1000);
+  }
+  let processedEls = new WeakSet();
+  let bgProcessedEls = new WeakSet();
 
   function injectCSS() {
     if (style) return;
@@ -97,6 +111,9 @@
 
     el.style.setProperty('opacity', '0', 'important');
     el.style.setProperty('visibility', 'hidden', 'important');
+    blockedImages.add(el);
+    blockedCount++;
+    reportBadge();
   }
 
   function blockBgContainer(el) {
@@ -237,6 +254,10 @@
     removeCSS();
     stopObserver();
     removeAll();
+    processedEls = new WeakSet();
+    bgProcessedEls = new WeakSet();
+    blockedImages.clear();
+    chrome.runtime.sendMessage({ type: 'badge-count', feature: 'image', count: 0 }).catch(() => {});
   }
 
   function setActive(val) {

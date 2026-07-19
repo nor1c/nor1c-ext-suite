@@ -92,11 +92,13 @@ const defaultConfig = {
   hideEmbedShareButton: true,
   hideEmbedPauseOverlay: true,
   hideSubscriptionsChannelList: true,
-  hideSubscriptionsLatestBar: true
+  hideSubscriptionsLatestBar: true,
+  mobileGridView: true
 }
 
 var config = {}
 var styleEl = null
+var stableVolumeState = new WeakMap()
 
 function applyConfig(cfg) {
   config = Object.assign({}, defaultConfig, cfg)
@@ -525,6 +527,15 @@ function buildCSS() {
     rules.push('ytd-guide-section-renderer[cpfyt-section="subscriptions"] { display: none !important; }')
   }
 
+  if (config.disableVideoPreviews) h('ytd-moving-thumbnail-renderer, ytd-video-preview, .ytd-video-preview')
+  if (config.hideChannels) h('ytd-channel-renderer, ytm-compact-channel-renderer')
+  if (config.hideNextButton) h('.ytp-next-button')
+  if (config.hideShareThanksClip) h('button[aria-label*="Share" i], button[aria-label*="Thanks" i], button[aria-label*="Clip" i], ytd-button-renderer:has(path[d*="M15 5.63"])')
+  if (config.hideShortsRemixButton) h('button[aria-label*="Remix" i], .yt-spec-button-shape-next[aria-label*="Remix" i]')
+  if (config.playerFixFullScreenButton) rules.push('.ytp-fullscreen-button { display: inline-block !important; visibility: visible !important; }')
+  if (config.revertSidebarOrder) rules.push('ytd-guide-renderer #sections { display: flex !important; flex-direction: column !important; } ytd-guide-section-renderer { order: initial !important; }')
+  if (config.mobileGridView && MOBILE) rules.push('ytm-rich-grid-renderer .rich-grid-renderer-contents { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }')
+
   if (config.playerControlsBg !== 'default') {
     rules.push('#movie_player { --yt-frosted-glass-backdrop-filter-override: unset !important; --yt-spec-static-overlay-background-hover: ' + config.playerControlsBg + ' !important; }')
   }
@@ -554,8 +565,8 @@ function onStorageChanged(changes, area) {
 }
 
 window.addEventListener('message', function(event) {
-  if (event.origin !== chrome.runtime.getURL('').replace(/\/$/, '')) return;
-  if (event.data && event.data.type === 'yt-panel-config') applyConfig(event.data.config)
+  if (event.origin !== chrome.runtime.getURL('').replace(/\/$/, '') || !event.data || event.data.type !== 'yt-panel-config') return
+  applyConfig(event.data.config)
 })
 
 function init() {
@@ -577,11 +588,12 @@ if (document.readyState === 'loading') {
   var cfg = {}
 
   function getCfg(cb) {
-    chrome.storage.sync.get([STORAGE_KEY], function(r) { cb(r[STORAGE_KEY] || {}) })
+    chrome.storage.sync.get([STORAGE_KEY], function(r) { cb(Object.assign({}, defaultConfig, r[STORAGE_KEY] || {})) })
   }
 
   function applyJS(c) {
-    cfg = c
+    cfg = Object.assign({}, defaultConfig, c || {})
+    if (!cfg.enabled) return
 
     if (cfg.redirectShorts && location.pathname.startsWith('/shorts/')) {
       var v = location.pathname.split('/')[2]
@@ -616,6 +628,56 @@ if (document.readyState === 'loading') {
       if (tv && !tv.paused) tv.pause()
     }
 
+    document.querySelectorAll('video').forEach(function(video) {
+      if (cfg.disableStableVolume) {
+        if (!stableVolumeState.has(video)) stableVolumeState.set(video, { volume: video.volume, muted: video.muted })
+      } else {
+        var stableVolume = stableVolumeState.get(video)
+        if (stableVolume) {
+          video.volume = stableVolume.volume
+          video.muted = stableVolume.muted
+          stableVolumeState.delete(video)
+        }
+      }
+    })
+
+    if (cfg.blockAds) {
+      var adVideo = document.querySelector('.ad-showing video')
+      if (adVideo && Number.isFinite(adVideo.duration)) adVideo.currentTime = adVideo.duration
+      var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[id^="skip-button"]')
+      if (skip) skip.click()
+    }
+
+    if (cfg.hideWatched) {
+      var threshold = Math.max(0, Math.min(100, parseInt(cfg.hideWatchedThreshold, 10) || 85))
+      document.querySelectorAll('#progress, .ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment').forEach(function(progress) {
+        var width = parseFloat(progress.style.width || getComputedStyle(progress).width) || 0
+        var parentWidth = progress.parentElement ? progress.parentElement.getBoundingClientRect().width : 0
+        var percent = progress.style.width.indexOf('%') !== -1 ? width : (parentWidth ? width / parentWidth * 100 : 0)
+        var card = progress.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytm-video-with-context-renderer')
+        if (card) card.classList.toggle('cpfyt-hide-watched', percent >= threshold)
+      })
+    }
+
+    if (cfg.alwaysUseOriginalAudio) {
+      var player = document.getElementById('movie_player')
+      if (player && typeof player.getAudioTrack === 'function' && typeof player.setAudioTrack === 'function') {
+        var track = player.getAudioTrack()
+        if (track && track.audioTrack && track.audioTrack.isDefault === false) player.setAudioTrack({ audioTrack: Object.assign({}, track.audioTrack, { id: track.audioTrack.id.split('.')[0] }) })
+      }
+    }
+
+    if (cfg.allowBackgroundPlay) {
+      document.querySelectorAll('video').forEach(function(video) {
+        if (!video.dataset.nor1cBackgroundPlay) {
+          video.dataset.nor1cBackgroundPlay = '1'
+          video.addEventListener('pause', function() {
+            if (document.hidden && cfg.allowBackgroundPlay && !video.ended) video.play().catch(function() {})
+          })
+        }
+      })
+    }
+
     if (cfg.enforceTheme && cfg.enforceTheme !== 'default') {
       document.documentElement.setAttribute('dark', cfg.enforceTheme === 'dark' ? '' : null)
       if (cfg.enforceTheme === 'light') document.documentElement.removeAttribute('dark')
@@ -626,11 +688,20 @@ if (document.readyState === 'loading') {
 
   chrome.storage.onChanged.addListener(function(changes, area) {
     if (area !== 'sync' || !changes[STORAGE_KEY]) return
-    applyJS(changes[STORAGE_KEY].newValue || {})
+    applyJS(Object.assign({}, defaultConfig, changes[STORAGE_KEY].newValue || {}))
   })
 
   window.addEventListener('message', function(e) {
-    if (e.origin !== chrome.runtime.getURL('').replace(/\/$/, '')) return;
-    if (e.data && e.data.type === 'yt-panel-config') applyJS(e.data.config)
+    if (e.origin !== chrome.runtime.getURL('').replace(/\/$/, '') || !e.data || e.data.type !== 'yt-panel-config') return
+    applyJS(e.data.config)
   })
+
+  var applyTimer = null
+  function scheduleApply() {
+    if (applyTimer) clearTimeout(applyTimer)
+    applyTimer = setTimeout(function() { applyJS(cfg) }, 100)
+  }
+  document.addEventListener('yt-navigate-finish', scheduleApply)
+  document.addEventListener('yt-page-data-updated', scheduleApply)
+  new MutationObserver(scheduleApply).observe(document.documentElement, { childList: true, subtree: true })
 })()

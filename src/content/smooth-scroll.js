@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STYLE_ID = 'nor1c-smooth-scroll-style';
   const CSS = 'html { scroll-behavior: smooth !important; }';
 
@@ -10,12 +10,18 @@
   let scrollTarget = null;
   let currentDecay = 0.90;
   const MIN_VEL = 0.3;
-  const scrollableCache = new WeakMap();
+  const CACHE_TTL = 30000;
+  let scrollableCache = new WeakMap();
+  let cacheResetTime = Date.now();
   let hasPlayingVideo = false;
   let softLanding = null;
   let prevMaxScroll = 0;
 
   function isScrollable(node) {
+    if (Date.now() - cacheResetTime > CACHE_TTL) {
+      scrollableCache = new WeakMap();
+      cacheResetTime = Date.now();
+    }
     if (scrollableCache.has(node)) return true;
     if (node.scrollHeight <= node.clientHeight + 1) return false;
     const ov = window.getComputedStyle(node).overflowY;
@@ -182,7 +188,11 @@
     if (handleScroll(e, delta)) e.preventDefault();
   }
 
+  let videoTrackingSetup = false;
+
   function setupVideoTracking() {
+    if (videoTrackingSetup) return;
+    videoTrackingSetup = true;
     function findVideoInPath(e) {
       const path = e.composedPath ? e.composedPath() : [e.target];
       for (let i = 0; i < path.length; i++) {
@@ -191,20 +201,15 @@
       return null;
     }
 
-    document.addEventListener('playing', function (e) {
-      const v = findVideoInPath(e);
-      if (v && !v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
-        hasPlayingVideo = true;
-      }
-    }, true);
+    function refreshPlayingState() {
+      hasPlayingVideo = false;
+      walk(document);
+    }
 
-    document.addEventListener('ended', function (e) {
-      if (findVideoInPath(e)) hasPlayingVideo = false;
-    }, true);
-
-    document.addEventListener('emptied', function (e) {
-      if (findVideoInPath(e)) hasPlayingVideo = false;
-    }, true);
+    document.addEventListener('playing', refreshPlayingState, true);
+    document.addEventListener('pause', refreshPlayingState, true);
+    document.addEventListener('ended', refreshPlayingState, true);
+    document.addEventListener('emptied', refreshPlayingState, true);
 
     function walk(root) {
       const videos = root.querySelectorAll('video');
@@ -215,9 +220,10 @@
           return;
         }
       }
-      const all = root.querySelectorAll('*');
-      for (let i = 0; i < all.length; i++) {
-        if (all[i].shadowRoot && !hasPlayingVideo) walk(all[i].shadowRoot);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.shadowRoot && !hasPlayingVideo) walk(node.shadowRoot);
       }
     }
     walk(document);
@@ -237,6 +243,7 @@
 
   function apply() {
     injectCSS();
+    setupVideoTracking();
     velocity = 0;
     scrollTarget = null;
     window.addEventListener('wheel', onWheel, { passive: false });
@@ -257,12 +264,14 @@
     if (active) apply(); else remove();
   }
 
-  setupVideoTracking();
-
   chrome.storage.sync.get(['smoothScroll'], (result) => {
     const val = result.smoothScroll === true;
     active = val;
-    if (val) apply();
+    if (val) {
+      apply();
+      var idle = window.requestIdleCallback || function(fn) { return setTimeout(fn, 1); };
+      idle(function() { setupVideoTracking(); });
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {

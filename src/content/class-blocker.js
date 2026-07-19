@@ -15,6 +15,7 @@
     return input.split(',')
       .map(s => s.trim())
       .filter(s => s.length > 0)
+      .filter(s => /^[a-zA-Z0-9\-_#.:\[\]="~\s*^$|]+$/.test(s))
       .map(s => {
         if (s.startsWith('.') || s.startsWith('#')) return s;
         return '.' + s;

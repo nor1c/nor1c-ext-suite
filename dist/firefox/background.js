@@ -1,9 +1,26 @@
+let videoDownloadEnabled = true;
+self.__nor1cVideoDownloadEnabled = true;
+chrome.storage.sync.get({ videoDownload: true }, result => {
+  videoDownloadEnabled = result.videoDownload !== false;
+  self.__nor1cVideoDownloadEnabled = videoDownloadEnabled;
+});
+
+const originalWebRequestAddListener = chrome.webRequest && chrome.webRequest.onBeforeRequest && chrome.webRequest.onBeforeRequest.addListener;
+if (originalWebRequestAddListener) {
+  chrome.webRequest.onBeforeRequest.addListener = function(listener, filter, extraInfoSpec) {
+    return originalWebRequestAddListener.call(this, details => {
+      if (videoDownloadEnabled) return listener(details);
+    }, filter, extraInfoSpec);
+  };
+}
+
 try { importScripts('background-video-downloader.js'); } catch (_) {}
 
 const badgeCounts = {};
 
 function updateBadge(tabId) {
-  const count = badgeCounts[tabId] || 0;
+  const featureCounts = badgeCounts[tabId] || {};
+  const count = Object.values(featureCounts).reduce((total, value) => total + value, 0);
   const text = count > 0 ? (count > 99 ? '99+' : String(count)) : '';
   chrome.action.setBadgeText({ text, tabId }).catch(() => {});
   chrome.action.setBadgeBackgroundColor({ color: '#3b82f6', tabId }).catch(() => {});
@@ -12,8 +29,13 @@ function updateBadge(tabId) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'badge-count' && sender.tab && sender.tab.id) {
     const tabId = sender.tab.id;
-    badgeCounts[tabId] = (badgeCounts[tabId] || 0) + (msg.count || 1);
+    if (!badgeCounts[tabId]) badgeCounts[tabId] = {};
+    badgeCounts[tabId][msg.feature || 'other'] = Math.max(0, msg.count || 0);
     updateBadge(tabId);
+  }
+  if (msg.message && !videoDownloadEnabled && ['add-video-links', 'download', 'get-video-links', 'download-video-link', 'bgXHRrequest'].includes(msg.message)) {
+    sendResponse(msg.message === 'get-video-links' ? { videoLinks: [], additionalLinks: [] } : { disabled: true });
+    return false;
   }
   if (msg.type === 'get-playing-videos') {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -33,6 +55,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   delete badgeCounts[tabId];
 });
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading' || changeInfo.url) {
+    badgeCounts[tabId] = {};
+    updateBadge(tabId);
+  }
+});
+
 let menusSetup = false;
 async function ensureMenus() {
   if (menusSetup) return;
@@ -44,10 +73,9 @@ async function ensureMenus() {
 }
 ensureMenus();
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.sync.set({
+chrome.runtime.onInstalled.addListener(async () => {
+  const defaults = {
     classBlocker: false,
-    
     blockedSelectors: '',
     imageBlocker: false,
     gifBlocker: false,
@@ -60,13 +88,19 @@ chrome.runtime.onInstalled.addListener(() => {
     hiddenRules: {},
     elementHider: true,
     blockNotifications: true,
+    blockLocation: true,
     quickTabSwitcher: true,
     cookieConsent: true,
     disableAnimations: false,
     videoAutoHide: false,
     videoAutoHideDelay: 3
-  });
-
+  };
+  const stored = await chrome.storage.sync.get(Object.keys(defaults));
+  const missing = {};
+  for (const [key, value] of Object.entries(defaults)) {
+    if (stored[key] === undefined) missing[key] = value;
+  }
+  if (Object.keys(missing).length > 0) await chrome.storage.sync.set(missing);
   ensureMenus();
 });
 
@@ -84,6 +118,7 @@ let _adBypassEnabled = null;
 chrome.storage.sync.get(['adLinkBypass'], r => { _adBypassEnabled = (r && r.adLinkBypass) !== false; });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.adLinkBypass) _adBypassEnabled = changes.adLinkBypass.newValue !== false;
+  if (area === 'sync' && changes.quickTabSwitcher) _quickTabSwitcherEnabled = changes.quickTabSwitcher.newValue !== false;
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -159,20 +194,32 @@ async function saveImageAsPng(srcUrl, tab) {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;
 
-  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'cookieConsent', 'disableAnimations'];
-  const changedKey = Object.keys(changes).find(k => toggleKeys.includes(k));
-  if (!changedKey) return;
+  if (changes.videoDownload) {
+    videoDownloadEnabled = changes.videoDownload.newValue !== false;
+    self.__nor1cVideoDownloadEnabled = videoDownloadEnabled;
+  }
+  if ((changes.imageBlocker && changes.imageBlocker.newValue === false) || (changes.gifBlocker && changes.gifBlocker.newValue === false)) {
+    for (const tabId of Object.keys(badgeCounts)) {
+      if (!badgeCounts[tabId]) badgeCounts[tabId] = {};
+      if (changes.imageBlocker && changes.imageBlocker.newValue === false) delete badgeCounts[tabId].image;
+      if (changes.gifBlocker && changes.gifBlocker.newValue === false) delete badgeCounts[tabId].gif;
+      updateBadge(Number(tabId));
+    }
+  }
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoDownload', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'cookieConsent', 'disableAnimations'];
+  const changedKeys = Object.keys(changes).filter(key => toggleKeys.includes(key));
+  if (changedKeys.length === 0) return;
 
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   for (const tab of tabs) {
     if (!tab.id) continue;
-    try {
+    for (const key of changedKeys) {
       chrome.tabs.sendMessage(tab.id, {
         type: 'toggle-changed',
-        key: changedKey,
-        value: changes[changedKey].newValue
+        key,
+        value: changes[key].newValue
       }).catch(() => {});
-    } catch (_) {}
+    }
   }
 });
 

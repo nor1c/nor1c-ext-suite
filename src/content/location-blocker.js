@@ -1,36 +1,11 @@
-﻿(function () {
-  const script = document.createElement('script');
-  script.textContent = `
-    (function() {
-      const fakeGeo = {
-        getCurrentPosition: function(success, error) {
-          if (typeof error === 'function') {
-            error({ code: 1, message: 'User denied Geolocation' });
-          }
-        },
-        watchPosition: function(success, error) {
-          if (typeof error === 'function') {
-            error({ code: 1, message: 'User denied Geolocation' });
-          }
-          return 0;
-        },
-        clearWatch: function() {}
-      };
+(function() {
+  function update(enabled) {
+    const state = document.querySelector('meta[name="nor1c-location-blocker"]');
+    if (state) state.content = enabled ? 'true' : 'false';
+  }
 
-      Object.defineProperty(Navigator.prototype, 'geolocation', {
-        get: function() { return fakeGeo; },
-        configurable: true
-      });
-
-      const origQuery = Permissions.prototype.query;
-      Permissions.prototype.query = function(desc) {
-        if (desc && desc.name === 'geolocation') {
-          return Promise.resolve({ state: 'denied', onchange: null });
-        }
-        return origQuery.call(this, desc);
-      };
-    })();
-  `;
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
+  chrome.storage.sync.get({ blockLocation: true }, result => update(result.blockLocation !== false));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.blockLocation) update(changes.blockLocation.newValue !== false);
+  });
 })();

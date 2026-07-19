@@ -118,5 +118,8 @@ async function main() {
   console.log('  Firefox: dist/firefox/ -> web-ext run (or load temporary add-on)\n');
 }
 
-main().catch(console.error);
+main().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
 

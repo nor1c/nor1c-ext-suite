@@ -38,6 +38,7 @@
   let observer = null;
   let style = null;
   let blockedCount = 0;
+  const blockedImages = new Set();
   let badgeTimer = null;
 
   function reportBadge() {
@@ -45,13 +46,13 @@
     badgeTimer = setTimeout(() => {
       badgeTimer = null;
       if (blockedCount > 0) {
-        chrome.runtime.sendMessage({ type: 'badge-count', count: blockedCount }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'badge-count', feature: 'image', count: blockedImages.size }).catch(() => {});
         blockedCount = 0;
       }
     }, 1000);
   }
-  const processedEls = new WeakSet();
-  const bgProcessedEls = new WeakSet();
+  let processedEls = new WeakSet();
+  let bgProcessedEls = new WeakSet();
 
   function injectCSS() {
     if (style) return;
@@ -110,6 +111,7 @@
 
     el.style.setProperty('opacity', '0', 'important');
     el.style.setProperty('visibility', 'hidden', 'important');
+    blockedImages.add(el);
     blockedCount++;
     reportBadge();
   }
@@ -252,6 +254,10 @@
     removeCSS();
     stopObserver();
     removeAll();
+    processedEls = new WeakSet();
+    bgProcessedEls = new WeakSet();
+    blockedImages.clear();
+    chrome.runtime.sendMessage({ type: 'badge-count', feature: 'image', count: 0 }).catch(() => {});
   }
 
   function setActive(val) {

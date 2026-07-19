@@ -31,25 +31,6 @@
     }
   }
 
-  const script = document.createElement('script');
-  script.textContent = '(' + function () {
-    const meta = document.createElement('meta');
-    meta.name = 'nor1c-ad-bypass';
-    meta.content = 'false';
-    document.documentElement.appendChild(meta);
-
-    const origOpen = window.open;
-    window.open = function (url, name, features) {
-      const el = document.querySelector('meta[name="nor1c-ad-bypass"]');
-      if (!el || el.content !== 'true' || !url) {
-        return origOpen.apply(window, arguments);
-      }
-      return { closed: true, close: function () {}, focus: function () {}, blur: function () {} };
-    };
-  } + ')();';
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
-
   document.addEventListener('click', function (e) {
     if (!bypassOn) return;
 

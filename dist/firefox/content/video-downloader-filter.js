@@ -72,7 +72,7 @@
 
   function notifyParent(hasVideos, msg) {
     try {
-      window.parent.postMessage({ type: 'video-detection-status', hasVideos: hasVideos, message: msg || '' }, '*');
+      window.parent.postMessage({ type: 'video-detection-status', hasVideos: hasVideos, message: msg || '' }, location.origin);
     } catch(e) {}
   }
 
@@ -110,17 +110,23 @@
   }
   hookVue();
 
+  var lastStatus = null;
+
   function enforceFilter() {
     var list = document.querySelector('.videos-list');
-    if (!list) return requestAnimationFrame(enforceFilter);
+    if (!list) return;
 
     var items = list.querySelectorAll('.video');
     if (items.length < 2) {
       for (var i = 0; i < items.length; i++) {
         if (items[i].style.display === 'none') items[i].style.removeProperty('display');
       }
-      notifyParent(items.length > 0, '');
-      return requestAnimationFrame(enforceFilter);
+      var hasItems = items.length > 0;
+      if (lastStatus !== hasItems) {
+        lastStatus = hasItems;
+        notifyParent(hasItems, '');
+      }
+      return;
     }
 
     var entries = [];
@@ -160,11 +166,20 @@
       }
     }
 
-    notifyParent(showSet.size > 0, '');
-    requestAnimationFrame(enforceFilter);
+    var hasVideos = showSet.size > 0;
+    if (lastStatus !== hasVideos) {
+      lastStatus = hasVideos;
+      notifyParent(hasVideos, '');
+    }
   }
 
-  requestAnimationFrame(enforceFilter);
+  var filterTimer = null;
+  var observer = new MutationObserver(function() {
+    if (filterTimer) clearTimeout(filterTimer);
+    filterTimer = setTimeout(enforceFilter, 50);
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  enforceFilter();
 
   function pollPlayingVideos() {
     try {

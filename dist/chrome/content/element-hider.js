@@ -433,8 +433,7 @@
     if (msg.type === 'start-element-picker') {
       enterPicker();
       sendResponse({ ok: true });
-    } else if (msg.type === 'hiddenRules-changed') {
-      // Reload cache from storage, then re-apply
+    } else if (msg.type === 'hiddenRules-changed' || (msg.type === 'toggle-changed' && msg.key === 'hiddenRules')) {
       loadRules(() => applyRules());
     } else if (msg.type === 'toggle-changed' && msg.key === 'elementHider') {
       elementHiderEnabled = msg.value !== false;

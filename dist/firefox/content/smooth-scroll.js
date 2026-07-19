@@ -188,7 +188,11 @@
     if (handleScroll(e, delta)) e.preventDefault();
   }
 
+  let videoTrackingSetup = false;
+
   function setupVideoTracking() {
+    if (videoTrackingSetup) return;
+    videoTrackingSetup = true;
     function findVideoInPath(e) {
       const path = e.composedPath ? e.composedPath() : [e.target];
       for (let i = 0; i < path.length; i++) {
@@ -197,20 +201,15 @@
       return null;
     }
 
-    document.addEventListener('playing', function (e) {
-      const v = findVideoInPath(e);
-      if (v && !v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
-        hasPlayingVideo = true;
-      }
-    }, true);
+    function refreshPlayingState() {
+      hasPlayingVideo = false;
+      walk(document);
+    }
 
-    document.addEventListener('ended', function (e) {
-      if (findVideoInPath(e)) hasPlayingVideo = false;
-    }, true);
-
-    document.addEventListener('emptied', function (e) {
-      if (findVideoInPath(e)) hasPlayingVideo = false;
-    }, true);
+    document.addEventListener('playing', refreshPlayingState, true);
+    document.addEventListener('pause', refreshPlayingState, true);
+    document.addEventListener('ended', refreshPlayingState, true);
+    document.addEventListener('emptied', refreshPlayingState, true);
 
     function walk(root) {
       const videos = root.querySelectorAll('video');
@@ -244,6 +243,7 @@
 
   function apply() {
     injectCSS();
+    setupVideoTracking();
     velocity = 0;
     scrollTarget = null;
     window.addEventListener('wheel', onWheel, { passive: false });

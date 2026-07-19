@@ -30,6 +30,7 @@
   let observer = null;
   let style = null;
   const hiddenEls = new WeakSet();
+  const blockedGifs = new Set();
   let gifBlockedCount = 0;
   let gifBadgeTimer = null;
 
@@ -38,7 +39,7 @@
     gifBadgeTimer = setTimeout(() => {
       gifBadgeTimer = null;
       if (gifBlockedCount > 0) {
-        chrome.runtime.sendMessage({ type: 'badge-count', count: gifBlockedCount }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'badge-count', feature: 'gif', count: blockedGifs.size }).catch(() => {});
         gifBlockedCount = 0;
       }
     }, 1000);
@@ -177,6 +178,7 @@
     el.style.setProperty('visibility', 'hidden', 'important');
     el.style.setProperty('opacity', '0', 'important');
     hiddenEls.add(el);
+    blockedGifs.add(el);
     gifBlockedCount++;
     reportGifBadge();
   }
@@ -185,6 +187,7 @@
     el.style.removeProperty('visibility');
     el.style.removeProperty('opacity');
     hiddenEls.delete(el);
+    blockedGifs.delete(el);
   }
 
   // =============================================================
@@ -292,6 +295,8 @@
     document.querySelectorAll('[style*="visibility: hidden"]').forEach((el) => {
       if (hiddenEls.has(el)) showElement(el);
     });
+    blockedGifs.clear();
+    chrome.runtime.sendMessage({ type: 'badge-count', feature: 'gif', count: 0 }).catch(() => {});
   }
 
   function setActive(val) {

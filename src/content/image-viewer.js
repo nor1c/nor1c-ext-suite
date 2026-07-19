@@ -14,12 +14,17 @@
     if (overlay) return;
     overlay = document.createElement('div');
     overlay.className = 'nor1c-viewer-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Image viewer');
 
     img = document.createElement('img');
+    img.setAttribute('alt', 'Viewed image');
     overlay.appendChild(img);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'nor1c-viewer-close';
+    closeBtn.setAttribute('aria-label', 'Close image viewer');
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
     closeBtn.addEventListener('click', closeViewer);
     overlay.appendChild(closeBtn);
@@ -95,6 +100,7 @@
     scale = 1;
     translateX = 0;
     translateY = 0;
+    document.removeEventListener('keydown', onKeyDown);
   }
 
   function onMouseDown(e) {
@@ -164,7 +170,7 @@
   // --- HD Image Detection ---
 
   async function detectHD(srcUrl) {
-    const parentHdUrl = findParentLinkHD();
+    const parentHdUrl = findParentLinkHD(srcUrl);
     if (parentHdUrl) return parentHdUrl;
 
     const patternHdUrl = tryPatternTransform(srcUrl);
@@ -176,22 +182,20 @@
     return srcUrl;
   }
 
-  function findParentLinkHD() {
-    const allImages = document.querySelectorAll('img');
-    for (const imgEl of allImages) {
-      if (imgEl.naturalWidth === 0 && imgEl.naturalHeight === 0) continue;
-      let parent = imgEl.parentElement;
-      while (parent && parent !== document.body) {
-        if (parent.tagName === 'A' && parent.href) {
-          const href = parent.href;
-          if (
-            /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(href)
-          ) {
-            return href;
-          }
-        }
-        parent = parent.parentElement;
+  function findParentLinkHD(srcUrl) {
+    const images = document.querySelectorAll('img');
+    let target = null;
+    for (const image of images) {
+      if (image.currentSrc === srcUrl || image.src === srcUrl) {
+        target = image;
+        break;
       }
+    }
+    if (!target) return null;
+    let parent = target.parentElement;
+    while (parent && parent !== document.body) {
+      if (parent.tagName === 'A' && parent.href && /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(parent.href)) return parent.href;
+      parent = parent.parentElement;
     }
     return null;
   }

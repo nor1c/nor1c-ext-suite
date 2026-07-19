@@ -258,9 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!tab || !tab.url) { hiddenSection.style.display = 'none'; return; }
     try {
       const url = new URL(tab.url);
-      const hostname = url.hostname;
-      const parts = hostname.split('.');
-      hiddenDomain = parts.length <= 2 ? hostname : parts.slice(-2).join('.');
+      hiddenDomain = nor1cGetDomain(url.hostname);
       currentPath = url.pathname.replace(/\/+$/, '') || '/';
     } catch (_) { hiddenSection.style.display = 'none'; return; }
     const result = await chrome.storage.sync.get(['hiddenRules']);
@@ -272,7 +270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const result = await chrome.storage.sync.get(['hiddenRules']);
     const rules = result.hiddenRules || {};
     const domainRules = rules[hiddenDomain] || [];
-    const remaining = domainRules.filter(r => r.path && r.path !== currentPath);
+    const remaining = domainRules.filter(rule => !pathsMatch(rule.path, currentPath));
     if (remaining.length === 0) delete rules[hiddenDomain];
     else rules[hiddenDomain] = remaining;
     await chrome.storage.sync.set({ hiddenRules: rules });

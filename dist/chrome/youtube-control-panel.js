@@ -123,7 +123,7 @@ function saveConfig() {
   var data = {}
   data[STORAGE_KEY] = cfg
   chrome.storage.sync.set(data)
-  window.parent.postMessage({ type: "yt-panel-config", config: cfg }, chrome.runtime.getURL(""))
+  window.parent.postMessage({ type: 'yt-panel-config', config: cfg }, '*')
 }
 
 function resetConfig() {
@@ -137,7 +137,7 @@ function resetConfig() {
   var data = {}
   data[STORAGE_KEY] = defaultConfig
   chrome.storage.sync.set(data)
-  window.parent.postMessage({ type: "yt-panel-config", config: defaultConfig }, chrome.runtime.getURL(""))
+  window.parent.postMessage({ type: 'yt-panel-config', config: defaultConfig }, '*')
   updateRanges()
 }
 
