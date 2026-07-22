@@ -58,7 +58,6 @@
     overlay.addEventListener('mouseleave', onMouseUp);
     overlay.addEventListener('wheel', onWheel, { passive: false });
 
-    document.addEventListener('keydown', onKeyDown);
     document.body.appendChild(overlay);
 
     toolbar.querySelector('#nor1c-zoom-in').addEventListener('click', () => zoom(0.2));
@@ -69,6 +68,8 @@
 
   function openViewer(srcUrl) {
     createOverlay();
+    document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown);
     scale = 1;
     translateX = 0;
     translateY = 0;

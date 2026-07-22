@@ -374,7 +374,8 @@ function buildCSS() {
   }
 
   if (config.hideEmbedShareButton || config.hideEmbedPauseOverlay) {
-    var isEmbed = location.hostname.indexOf('youtube.com/embed') !== -1 || location.hostname.indexOf('youtube-nocookie.com/embed') !== -1
+    var isEmbedHost = location.hostname === 'www.youtube.com' || location.hostname === 'youtube.com' || location.hostname === 'www.youtube-nocookie.com' || location.hostname === 'youtube-nocookie.com'
+    var isEmbed = isEmbedHost && location.pathname.startsWith('/embed/')
     if (isEmbed) {
       if (config.hideEmbedShareButton) h('.ytp-share-button')
       if (config.hideEmbedPauseOverlay) h('.ytp-pause-overlay-container')
@@ -697,11 +698,21 @@ if (document.readyState === 'loading') {
   })
 
   var applyTimer = null
+  var relevantMutationSelector = 'video, #movie_player, .html5-video-player, .ad-showing, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[id^="skip-button"], #progress, .ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment, .ytp-autonav-toggle-button, .ytp-size-button, ytd-channel-video-player-renderer'
   function scheduleApply() {
     if (applyTimer) clearTimeout(applyTimer)
     applyTimer = setTimeout(function() { applyJS(cfg) }, 100)
   }
+  function mutationNeedsApply(mutation) {
+    if (mutation.target instanceof Element && mutation.target.closest(relevantMutationSelector)) return true
+    return Array.prototype.some.call(mutation.addedNodes, function(node) {
+      if (!(node instanceof Element)) return false
+      return node.matches(relevantMutationSelector) || Boolean(node.querySelector(relevantMutationSelector))
+    })
+  }
   document.addEventListener('yt-navigate-finish', scheduleApply)
   document.addEventListener('yt-page-data-updated', scheduleApply)
-  new MutationObserver(scheduleApply).observe(document.documentElement, { childList: true, subtree: true })
+  new MutationObserver(function(mutations) {
+    if (mutations.some(mutationNeedsApply)) scheduleApply()
+  }).observe(document.documentElement, { childList: true, subtree: true })
 })()

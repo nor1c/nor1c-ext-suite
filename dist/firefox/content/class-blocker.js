@@ -57,13 +57,15 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'toggle-changed' && msg.key === 'classBlocker') {
-      blockerEnabled = msg.value === true;
-      apply();
-    } else if ((msg.type === 'blockedSelectors-changed') || (msg.type === 'toggle-changed' && msg.key === 'blockedSelectors')) {
+    if (msg.type === 'blockedSelectors-changed') {
       rawSelectors = msg.value || '';
       apply();
+      return;
     }
+    if (msg.type !== 'toggle-changed' || !msg.changes) return;
+    if ('classBlocker' in msg.changes) blockerEnabled = msg.changes.classBlocker === true;
+    if ('blockedSelectors' in msg.changes) rawSelectors = msg.changes.blockedSelectors || '';
+    if ('classBlocker' in msg.changes || 'blockedSelectors' in msg.changes) apply();
   });
 })();
 

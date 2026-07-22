@@ -1,10 +1,10 @@
-﻿(function () {
+(function () {
   const currentHost = location.hostname.replace(/^www\./, '');
   let bypassOn = false;
 
   function isLikelyAdUrl(url) {
     try {
-      const u = new URL(url);
+      const u = new URL(url, location.href);
       const host = u.hostname.replace(/^www\./, '');
       const path = u.pathname;
 
@@ -51,27 +51,13 @@
     }
   }, true);
 
-  function setState(val) {
-    bypassOn = !!val;
-    try {
-      const meta = document.querySelector('meta[name="nor1c-ad-bypass"]');
-      if (meta) meta.content = bypassOn ? 'true' : 'false';
-    } catch (_) {}
-  }
+  chrome.storage.sync.get({ adLinkBypass: true }, function (result) {
+    bypassOn = result.adLinkBypass !== false;
+  });
 
-  setState(true);
-
-  try {
-    chrome.storage.sync.get(['adLinkBypass'], function (r) {
-      setState(r.adLinkBypass !== false);
-    });
-  } catch (_) {}
-
-  try {
-    chrome.runtime.onMessage.addListener(function (msg) {
-      if (msg.type === 'toggle-changed' && msg.key === 'adLinkBypass') {
-        setState(msg.value);
-      }
-    });
-  } catch (_) {}
+  chrome.storage.onChanged.addListener(function (changes, area) {
+    if (area === 'sync' && changes.adLinkBypass) {
+      bypassOn = changes.adLinkBypass.newValue !== false;
+    }
+  });
 })();

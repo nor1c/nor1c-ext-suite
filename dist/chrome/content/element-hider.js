@@ -31,8 +31,9 @@
       el.textContent = '';
       return;
     }
-    const selectors = cachedDomainRules.map(r => r.selector).join(',\n');
-    el.textContent = selectors + ' { display: none !important; }';
+    el.textContent = cachedDomainRules
+      .map(rule => rule.selector + ' { display: none !important; }')
+      .join('\n');
   }
 
   function loadRules(callback) {
@@ -433,10 +434,11 @@
     if (msg.type === 'start-element-picker') {
       enterPicker();
       sendResponse({ ok: true });
-    } else if (msg.type === 'hiddenRules-changed' || (msg.type === 'toggle-changed' && msg.key === 'hiddenRules')) {
+    } else if (msg.type === 'hiddenRules-changed' || (msg.type === 'toggle-changed' && msg.changes && 'hiddenRules' in msg.changes)) {
       loadRules(() => applyRules());
-    } else if (msg.type === 'toggle-changed' && msg.key === 'elementHider') {
-      elementHiderEnabled = msg.value !== false;
+    }
+    if (msg.type === 'toggle-changed' && msg.changes && 'elementHider' in msg.changes) {
+      elementHiderEnabled = msg.changes.elementHider !== false;
       if (elementHiderEnabled) {
         applyRules();
       } else {

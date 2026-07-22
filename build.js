@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const ROOT = __dirname;
@@ -12,6 +12,7 @@ const COPY_FILES = [
   'popup.css',
   'popup.js',
   'background.js',
+  'background.chrome.js',
   'background-video-downloader.js',
   'video-downloader-popup.html',
   'video-downloader-popup.js',

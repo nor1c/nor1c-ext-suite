@@ -1,3 +1,109 @@
+const BACKUP_VERSION = 1;
+const BOOLEAN_SETTING_KEYS = new Set([
+  'imageBlocker',
+  'gifBlocker',
+  'videoControls',
+  'videoAutoHide',
+  'videoDownload',
+  'adLinkBypass',
+  'urlCleaner',
+  'smoothScroll',
+  'quickTabSwitcher',
+  'elementHider',
+  'classBlocker',
+  'cookieConsent',
+  'disableAnimations',
+  'blockNotifications',
+  'blockLocation'
+]);
+const BACKUP_KEYS = [
+  ...BOOLEAN_SETTING_KEYS,
+  'videoAutoHideDelay',
+  'videoControlsEnabledSites',
+  'hiddenRules',
+  'blockedSelectors',
+  'ytControlPanel'
+];
+const YT_STRING_SETTING_KEYS = new Set([
+  'enforceTheme',
+  'hideWatchedThreshold',
+  'minimumGridItemsPerRow',
+  'minimumShortsPerRow',
+  'playerControlsBg',
+  'searchThumbnailSize'
+]);
+const YT_BOOLEAN_SETTING_KEYS = new Set([
+  'enabled', 'debug', 'alwaysShowShortsProgressBar', 'blockAds', 'disableAmbientMode', 'disableAutoplay',
+  'disableHomeFeed', 'disableStableVolume', 'disableThemedHover', 'disableVideoPreviews', 'hideAI',
+  'hideAskButton', 'hideAutoDubbed', 'hideChannelBanner', 'hideChannelWatermark', 'hideChannels',
+  'hideCollaborations', 'hideComments', 'hideEndCards', 'hideEndVideos', 'hideExperiencingInterruptions',
+  'hideExploreButton', 'hideHiddenVideos', 'hideHomeCategories', 'hideHomePosts', 'hideInfoPanels',
+  'hideJumpAheadButton', 'hideLive', 'hideLowViews', 'hideMembersOnly', 'hideMetadata', 'hideMixes',
+  'hideMoviesAndTV', 'hideMusic', 'hideNextButton', 'hidePlaylists', 'hidePremiumUpsells', 'hideRelated',
+  'hideRelatedBelow', 'hideShareThanksClip', 'hideShorts', 'hideShortsMusicLink', 'hideShortsRelatedLink',
+  'hideShortsSuggestedActions', 'hideShortsMetadataUntilHover', 'hideShortsRemixButton',
+  'hideSidebarSubscriptions', 'hideSponsored', 'hideStreamed', 'hideSuggestedSections', 'hideUpcoming',
+  'hideVoiceSearch', 'hideWatched', 'playerFixFullScreenButton', 'playerHideFullScreenControls',
+  'playerHideFullScreenMoreVideos', 'playerHideFullScreenTitle', 'playerHideFullScreenVoting', 'redirectShorts',
+  'removePink', 'restoreMiniplayerButton', 'restoreSidebarSubscriptionsLink', 'revertGiantRelated',
+  'revertSidebarOrder', 'showFullVideoTitles', 'stopShortsLooping', 'useSquareCorners',
+  'alwaysUseOriginalAudio', 'alwaysUseTheaterMode', 'fullSizeTheaterMode', 'fullSizeTheaterModeHideHeader',
+  'fullWidthChannelPage', 'hideChat', 'hideChatFullScreen', 'fixGhostCards', 'tidyGuideSidebar',
+  'displaySubscriptionsGridAsList', 'displayHomeGridAsList', 'pauseChannelTrailers', 'allowBackgroundPlay',
+  'hideEmbedShareButton', 'hideEmbedPauseOverlay', 'hideSubscriptionsChannelList',
+  'hideSubscriptionsLatestBar', 'mobileGridView'
+]);
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateHiddenRules(value) {
+  if (!isPlainObject(value)) return false;
+  return Object.values(value).every(rules => Array.isArray(rules) && rules.every(rule => {
+    if (!isPlainObject(rule) || typeof rule.id !== 'string' || typeof rule.selector !== 'string') return false;
+    if (rule.path !== undefined && typeof rule.path !== 'string') return false;
+    if (rule.contentHint !== undefined && typeof rule.contentHint !== 'string') return false;
+    return rule.createdAt === undefined || (typeof rule.createdAt === 'number' && Number.isFinite(rule.createdAt));
+  }));
+}
+
+function validateSetting(key, value) {
+  if (BOOLEAN_SETTING_KEYS.has(key)) return typeof value === 'boolean';
+  if (key === 'videoAutoHideDelay') return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 1 && value <= 10;
+  if (key === 'videoControlsEnabledSites') return Array.isArray(value) && value.every(domain => typeof domain === 'string' && domain.trim().length > 0);
+  if (key === 'blockedSelectors') return typeof value === 'string';
+  if (key === 'hiddenRules') return validateHiddenRules(value);
+  if (key === 'ytControlPanel') {
+    if (!isPlainObject(value)) return false;
+    return Object.entries(value).every(([optionKey, option]) => {
+      if (YT_BOOLEAN_SETTING_KEYS.has(optionKey)) return typeof option === 'boolean';
+      if (YT_STRING_SETTING_KEYS.has(optionKey)) return typeof option === 'string';
+      return false;
+    });
+  }
+  return false;
+}
+
+function validateBackupPayload(payload) {
+  if (!isPlainObject(payload)) throw new Error('Invalid backup file format.');
+  if (payload.version !== BACKUP_VERSION) throw new Error(`Unsupported backup version: ${String(payload.version)}`);
+  if (!isPlainObject(payload.data)) throw new Error('Invalid backup data.');
+
+  const unknownKey = Object.keys(payload.data).find(key => !BACKUP_KEYS.includes(key));
+  if (unknownKey) throw new Error(`Unknown setting: ${unknownKey}`);
+
+  const settings = {};
+  for (const key of BACKUP_KEYS) {
+    if (!(key in payload.data)) continue;
+    if (!validateSetting(key, payload.data[key])) throw new Error(`Invalid setting: ${key}`);
+    settings[key] = key === 'videoControlsEnabledSites'
+      ? Array.from(new Set(payload.data[key].map(domain => domain.trim().toLowerCase())))
+      : payload.data[key];
+  }
+  return settings;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'cookieConsent', 'disableAnimations'];
   const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: true, adLinkBypass: true, urlCleaner: true, smoothScroll: true, quickTabSwitcher: true, elementHider: true, classBlocker: false, cookieConsent: true, disableAnimations: false };
@@ -33,10 +139,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   let frameResizeTimer = null;
   let frameResizeObserver = null;
 
-  function updateVideoDownloaderFrame(videoDownloadOn) {
+  async function updateVideoDownloaderFrame(videoDownloadOn) {
     const section = document.getElementById('video-sources-section');
     const frame = document.getElementById('video-downloader-frame');
     if (videoDownloadOn) {
+      const response = await chrome.runtime.sendMessage({ type: 'ensure-video-downloader-background' }).catch(() => null);
+      if (!response || !response.loaded) {
+        section.style.display = 'none';
+        return;
+      }
       section.style.display = '';
       frame.style.display = '';
       if (!frame.src || frame.src === 'about:blank') frame.src = 'video-downloader-popup.html';
@@ -314,11 +425,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     await loadHiddenElements();
-  const backupKeys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoAutoHide', 'videoAutoHideDelay', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'cookieConsent', 'disableAnimations', 'videoControlsEnabledSites', 'hiddenRules', 'blockedSelectors', 'blockNotifications', 'ytControlPanel'];
-
   document.getElementById('export-btn').addEventListener('click', async () => {
-    const data = await chrome.storage.sync.get(backupKeys);
-    const payload = { version: 1, exportedAt: new Date().toISOString(), data };
+    const data = await chrome.storage.sync.get(BACKUP_KEYS);
+    const payload = { version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const date = new Date().toISOString().slice(0, 10);
@@ -336,26 +445,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const text = await file.text();
       const payload = JSON.parse(text);
-      if (!payload.version || !payload.data || typeof payload.data !== 'object') {
-        throw new Error('Invalid backup file format.');
-      }
-      const importKeys = Object.keys(payload.data);
-      const unknownKeys = importKeys.filter(k => !backupKeys.includes(k));
-      if (unknownKeys.length > 0) {
-        throw new Error(`Unknown keys in backup: ${unknownKeys.join(', ')}`);
-      }
-      const toSet = {};
-      for (const key of backupKeys) {
-        if (key in payload.data) {
-          toSet[key] = payload.data[key];
-        }
-      }
+      const toSet = validateBackupPayload(payload);
       await chrome.storage.sync.set(toSet);
       window.location.reload();
     } catch (err) {
       const importBtn = document.getElementById('import-btn');
       const originalText = importBtn.textContent;
-      importBtn.textContent = 'Failed!';
+      importBtn.textContent = err instanceof Error ? err.message : 'Import failed';
       importBtn.style.color = '#ef4444';
       setTimeout(() => { importBtn.textContent = originalText; importBtn.style.color = ''; }, 3000);
     }

@@ -1,65 +1,84 @@
 (function () {
-  var trackedSources = new WeakMap();
+  const playingVideos = new Set();
+  const visibilityObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting || entry.intersectionRatio === 0 || !isRendered(entry.target)) pauseVideo(entry.target);
+    });
+  }, { threshold: 0.01 });
 
-  function getVideoSrc(video) {
-    return video.currentSrc || video.src || '';
+  function isRendered(video) {
+    const style = getComputedStyle(video);
+    return video.getClientRects().length > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
   }
 
-  function updatePlaying(video) {
-    var src = getVideoSrc(video);
-    if (src) trackedSources.set(video, src);
+  function isInViewport(video) {
+    const rect = video.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
+  }
+
+  function pauseVideo(video) {
+    visibilityObserver.unobserve(video);
+    playingVideos.delete(video);
+    if (!video.paused) video.pause();
+  }
+
+  function pauseAllVideos() {
+    Array.from(playingVideos).forEach(pauseVideo);
+    publishState();
+  }
+
+  function getVideoUrls(video) {
+    const urls = [video.currentSrc, video.src];
+    video.querySelectorAll('source').forEach(source => urls.push(source.src));
+    return urls.filter(url => typeof url === 'string' && url && !url.startsWith('blob:'));
   }
 
   function getPlayingUrls() {
-    var urls = [];
-    document.querySelectorAll('video').forEach(function(video) {
-      updatePlaying(video);
-      var src = trackedSources.get(video);
-      if (src && !video.paused && !video.ended && video.readyState > 2) urls.push(src);
+    const urls = [];
+    playingVideos.forEach(video => {
+      if (!video.isConnected || video.paused || video.ended || video.readyState < 3) {
+        playingVideos.delete(video);
+        return;
+      }
+      urls.push(...getVideoUrls(video));
     });
     return Array.from(new Set(urls));
   }
 
-  function hookVideo(video) {
-    if (video.__playingTracked) return;
-    video.__playingTracked = true;
-    video.addEventListener('play', function () { updatePlaying(video); });
-    video.addEventListener('playing', function () { updatePlaying(video); });
-    video.addEventListener('pause', function () { updatePlaying(video); });
-    video.addEventListener('ended', function () { updatePlaying(video); });
-    video.addEventListener('emptied', function () { updatePlaying(video); });
-    updatePlaying(video);
+  function publishState() {
+    chrome.runtime.sendMessage({
+      type: 'video-playback-state',
+      playing: getPlayingUrls()
+    }).catch(() => {});
   }
 
-  function scanVideos() {
-    document.querySelectorAll('video').forEach(hookVideo);
-  }
-
-  var observer = new MutationObserver(function (mutations) {
-    for (var i = 0; i < mutations.length; i++) {
-      var m = mutations[i];
-      if (m.type === 'childList') {
-        for (var j = 0; j < m.addedNodes.length; j++) {
-          var node = m.addedNodes[j];
-          if (node.nodeType !== 1) continue;
-          if (node.tagName === 'VIDEO') hookVideo(node);
-          if (node.querySelectorAll) {
-            node.querySelectorAll('video').forEach(hookVideo);
-          }
-        }
+  function handlePlaybackEvent(event) {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement)) return;
+    if (event.type === 'playing') {
+      if (document.hidden || !isRendered(video) || !isInViewport(video)) {
+        pauseVideo(video);
+      } else {
+        playingVideos.add(video);
+        visibilityObserver.observe(video);
       }
+    } else {
+      visibilityObserver.unobserve(video);
+      playingVideos.delete(video);
     }
+    publishState();
+  }
+
+  ['playing', 'pause', 'ended', 'emptied', 'waiting', 'stalled', 'abort'].forEach(type => {
+    document.addEventListener(type, handlePlaybackEvent, true);
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pauseAllVideos();
+  });
 
-  scanVideos();
-  setInterval(scanVideos, 2000);
-
-  chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.type === 'get-playing-videos') {
-      scanVideos();
       sendResponse({ playing: getPlayingUrls() });
-      return true;
     }
   });
 })();

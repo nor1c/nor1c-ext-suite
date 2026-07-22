@@ -33,6 +33,7 @@
     'FIGURE', 'ASIDE', 'FORM', 'FIELDSET', 'LI', 'TD', 'TH'
   ]);
   const MIN_SIZE = 64;
+  const CONTAINER_SELECTOR = Array.from(CONTAINER_TAGS).map(function (tag) { return tag.toLowerCase(); }).join(',');
 
   let active = null;
   let observer = null;
@@ -53,6 +54,8 @@
   }
   let processedEls = new WeakSet();
   let bgProcessedEls = new WeakSet();
+  let imageStyles = new WeakMap();
+  let backgroundStyles = new Map();
 
   function injectCSS() {
     if (style) return;
@@ -84,7 +87,20 @@
     }
   }
 
+  function rememberStyle(el, property) {
+    return {
+      value: el.style.getPropertyValue(property),
+      priority: el.style.getPropertyPriority(property)
+    };
+  }
+
+  function restoreStyle(el, property, state) {
+    if (state.value) el.style.setProperty(property, state.value, state.priority);
+    else el.style.removeProperty(property);
+  }
+
   function blockImgOrPicture(el) {
+    if (el.tagName === 'IMG' && el.parentElement && el.parentElement.tagName === 'PICTURE') el = el.parentElement;
     if (processedEls.has(el)) return;
     processedEls.add(el);
 
@@ -109,6 +125,10 @@
     wrapper.appendChild(el);
     wrapper.appendChild(overlay);
 
+    imageStyles.set(el, {
+      opacity: rememberStyle(el, 'opacity'),
+      visibility: rememberStyle(el, 'visibility')
+    });
     el.style.setProperty('opacity', '0', 'important');
     el.style.setProperty('visibility', 'hidden', 'important');
     blockedImages.add(el);
@@ -120,8 +140,11 @@
     if (bgProcessedEls.has(el)) return;
     bgProcessedEls.add(el);
 
-    el.setAttribute('data-nor1c-bg', el.style.backgroundImage || '');
-    el.setAttribute('data-nor1c-bg-color', el.style.backgroundColor || '');
+    backgroundStyles.set(el, {
+      backgroundImage: rememberStyle(el, 'background-image'),
+      backgroundColor: rememberStyle(el, 'background-color'),
+      position: rememberStyle(el, 'position')
+    });
 
     el.style.setProperty('background-image', 'none', 'important');
     el.style.setProperty('background-color', BG_COLOR, 'important');
@@ -130,8 +153,7 @@
     overlay.className = OVERLAY_CLASS;
     overlay.textContent = OVERLAY_TEXT;
     if (getComputedStyle(el).position === 'static') {
-      el.style.position = 'relative';
-      el.setAttribute('data-nor1c-pos-static', '1');
+      el.style.setProperty('position', 'relative');
     }
     el.appendChild(overlay);
   }
@@ -141,19 +163,16 @@
       blockImgOrPicture(el);
     }
     if (el.querySelectorAll) {
-      el.querySelectorAll('img, picture').forEach(function (img) {
-        blockImgOrPicture(img);
+      el.querySelectorAll('picture, img:not(picture img)').forEach(function (image) {
+        blockImgOrPicture(image);
       });
     }
     if (shouldBlock(el)) {
       blockBgContainer(el);
     }
     if (el.querySelectorAll) {
-      CONTAINER_TAGS.forEach(function (_tag) {
-        const nodes = el.getElementsByTagName(_tag);
-        for (let i = 0; i < nodes.length; i++) {
-          if (shouldBlock(nodes[i])) blockBgContainer(nodes[i]);
-        }
+      el.querySelectorAll(CONTAINER_SELECTOR).forEach(function (node) {
+        if (shouldBlock(node)) blockBgContainer(node);
       });
     }
   }
@@ -162,11 +181,22 @@
     if (observer) return;
     observer = new MutationObserver((mutations) => {
       for (let i = 0; i < mutations.length; i++) {
+        const removedNodes = mutations[i].removedNodes;
+        for (let j = 0; j < removedNodes.length; j++) {
+          const node = removedNodes[j];
+          if (node.nodeType !== 1 || node.classList.contains(OVERLAY_CLASS)) continue;
+          Array.from(blockedImages).forEach(image => {
+            const wrapper = image.parentElement;
+            const ownedMove = wrapper && wrapper.classList.contains(WRAPPER_CLASS) && wrapper.isConnected;
+            if (!ownedMove && (image === node || node.contains(image))) unwrapImgOrPicture(image);
+          });
+          Array.from(backgroundStyles.keys()).forEach(container => {
+            if (container === node || node.contains(container)) restoreBgContainer(container);
+          });
+        }
         const nodes = mutations[i].addedNodes;
         for (let j = 0; j < nodes.length; j++) {
-          if (nodes[j].nodeType === 1) {
-            scanElement(nodes[j]);
-          }
+          if (nodes[j].nodeType === 1) scanElement(nodes[j]);
         }
       }
     });
@@ -185,63 +215,39 @@
 
   function unwrapImgOrPicture(el) {
     const wrapper = el.parentElement;
-    if (!wrapper || !wrapper.classList.contains(WRAPPER_CLASS)) return;
-    const parent = wrapper.parentElement;
-    if (!parent) return;
-    const overlay = wrapper.querySelector('.' + OVERLAY_CLASS);
-    if (overlay) overlay.remove();
-    parent.insertBefore(el, wrapper);
-    wrapper.remove();
-    el.style.removeProperty('opacity');
-    el.style.removeProperty('visibility');
+    if (wrapper && wrapper.classList.contains(WRAPPER_CLASS)) {
+      const overlay = wrapper.querySelector('.' + OVERLAY_CLASS);
+      if (overlay) overlay.remove();
+      const parent = wrapper.parentElement;
+      if (parent) parent.insertBefore(el, wrapper);
+      else wrapper.removeChild(el);
+      wrapper.remove();
+    }
+    const state = imageStyles.get(el);
+    if (state) {
+      restoreStyle(el, 'opacity', state.opacity);
+      restoreStyle(el, 'visibility', state.visibility);
+      imageStyles.delete(el);
+    }
+    blockedImages.delete(el);
   }
 
   function restoreBgContainer(el) {
-    const overlays = el.querySelectorAll('.' + OVERLAY_CLASS);
-    for (let i = 0; i < overlays.length; i++) overlays[i].remove();
-
-    const origBg = el.getAttribute('data-nor1c-bg');
-    if (origBg !== null) {
-      if (origBg) el.style.backgroundImage = origBg;
-      else el.style.removeProperty('background-image');
-      el.removeAttribute('data-nor1c-bg');
-    } else {
-      el.style.removeProperty('background-image');
-    }
-
-    const origBgColor = el.getAttribute('data-nor1c-bg-color');
-    if (origBgColor !== null) {
-      if (origBgColor) el.style.backgroundColor = origBgColor;
-      else el.style.removeProperty('background-color');
-      el.removeAttribute('data-nor1c-bg-color');
-    } else {
-      el.style.removeProperty('background-color');
-    }
-
-    if (el.getAttribute('data-nor1c-pos-static')) {
-      el.style.removeProperty('position');
-      el.removeAttribute('data-nor1c-pos-static');
-    }
-
+    const state = backgroundStyles.get(el);
+    if (!state) return;
+    Array.from(el.children).forEach(function (child) {
+      if (child.classList.contains(OVERLAY_CLASS)) child.remove();
+    });
+    restoreStyle(el, 'background-image', state.backgroundImage);
+    restoreStyle(el, 'background-color', state.backgroundColor);
+    restoreStyle(el, 'position', state.position);
+    backgroundStyles.delete(el);
     bgProcessedEls.delete(el);
   }
 
   function removeAll() {
-    document.querySelectorAll('.' + WRAPPER_CLASS).forEach(function (wrapper) {
-      const img = wrapper.querySelector('img, picture');
-      const parent = wrapper.parentElement;
-      if (img && parent) {
-        parent.insertBefore(img, wrapper);
-        img.style.removeProperty('opacity');
-        img.style.removeProperty('visibility');
-      }
-      wrapper.remove();
-    });
-    document.querySelectorAll('.' + OVERLAY_CLASS).forEach(function (overlay) {
-      const container = overlay.parentElement;
-      overlay.remove();
-      if (container) restoreBgContainer(container);
-    });
+    Array.from(blockedImages).reverse().forEach(unwrapImgOrPicture);
+    Array.from(backgroundStyles.keys()).reverse().forEach(restoreBgContainer);
   }
 
   function apply() {
@@ -251,11 +257,15 @@
   }
 
   function remove() {
+    if (badgeTimer) { clearTimeout(badgeTimer); badgeTimer = null; }
+    blockedCount = 0;
     removeCSS();
     stopObserver();
     removeAll();
     processedEls = new WeakSet();
     bgProcessedEls = new WeakSet();
+    imageStyles = new WeakMap();
+    backgroundStyles = new Map();
     blockedImages.clear();
     chrome.runtime.sendMessage({ type: 'badge-count', feature: 'image', count: 0 }).catch(() => {});
   }

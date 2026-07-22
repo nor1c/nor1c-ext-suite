@@ -190,43 +190,45 @@
 
   let videoTrackingSetup = false;
 
+  function walkVideos(root) {
+    const videos = root.querySelectorAll('video');
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      if (!video.paused && !video.ended && video.getBoundingClientRect().width > 200) {
+        hasPlayingVideo = true;
+        return;
+      }
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.shadowRoot && !hasPlayingVideo) walkVideos(node.shadowRoot);
+    }
+  }
+
+  function refreshPlayingState() {
+    hasPlayingVideo = false;
+    walkVideos(document);
+  }
+
   function setupVideoTracking() {
     if (videoTrackingSetup) return;
     videoTrackingSetup = true;
-    function findVideoInPath(e) {
-      const path = e.composedPath ? e.composedPath() : [e.target];
-      for (let i = 0; i < path.length; i++) {
-        if (path[i] && path[i].tagName === 'VIDEO') return path[i];
-      }
-      return null;
-    }
-
-    function refreshPlayingState() {
-      hasPlayingVideo = false;
-      walk(document);
-    }
-
     document.addEventListener('playing', refreshPlayingState, true);
     document.addEventListener('pause', refreshPlayingState, true);
     document.addEventListener('ended', refreshPlayingState, true);
     document.addEventListener('emptied', refreshPlayingState, true);
+    refreshPlayingState();
+  }
 
-    function walk(root) {
-      const videos = root.querySelectorAll('video');
-      for (let i = 0; i < videos.length; i++) {
-        const v = videos[i];
-        if (!v.paused && !v.ended && v.getBoundingClientRect().width > 200) {
-          hasPlayingVideo = true;
-          return;
-        }
-      }
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-      let node;
-      while ((node = walker.nextNode())) {
-        if (node.shadowRoot && !hasPlayingVideo) walk(node.shadowRoot);
-      }
-    }
-    walk(document);
+  function stopVideoTracking() {
+    if (!videoTrackingSetup) return;
+    videoTrackingSetup = false;
+    document.removeEventListener('playing', refreshPlayingState, true);
+    document.removeEventListener('pause', refreshPlayingState, true);
+    document.removeEventListener('ended', refreshPlayingState, true);
+    document.removeEventListener('emptied', refreshPlayingState, true);
+    hasPlayingVideo = false;
   }
 
   function injectCSS() {
@@ -255,6 +257,7 @@
     window.removeEventListener('wheel', onWheel, { passive: false });
     window.removeEventListener('keydown', onKeyDown, { passive: false });
     if (loopId) { cancelAnimationFrame(loopId); loopId = null; }
+    stopVideoTracking();
     velocity = 0;
     scrollTarget = null;
   }

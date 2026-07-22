@@ -11,7 +11,8 @@
     "activeTab",
     "clipboardWrite",
     "tabs",
-    "webRequest"
+    "webRequest",
+    "webNavigation"
   ],
   "commands": {
     "switch-tab": {
@@ -47,18 +48,8 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content/privacy-main.js"
-      ],
-      "run_at": "document_start",
-      "all_frames": true,
-      "world": "MAIN"
-    },
-    {
-      "matches": [
-        "*://*.youtube.com/*"
+        "*://*.youtube.com/*",
+        "*://*.youtube-nocookie.com/embed/*"
       ],
       "js": [
         "content/youtube-control-panel.js"
@@ -72,7 +63,6 @@
       ],
       "js": [
         "lib/utils.js",
-        "content/notification-blocker.js",
         "content/context-listener.js",
         "content/url-cleaner.js",
         "content/image-blocker.js",
@@ -81,7 +71,6 @@
         "content/ad-link-bypass.js",
         "content/element-hider.js",
         "content/save-to-png.js",
-        "content/location-blocker.js",
         "content/smooth-scroll.js",
         "content/class-blocker.js",
         "content/disable-animations.js",
@@ -111,8 +100,7 @@
         "*://*.globo.com/*"
       ],
       "js": [
-        "content/video-play-reset.js",
-        "content/video-downloader-inject.js",
+        "content/video-downloader-loader.js",
         "content/video-playing-tracker.js"
       ],
       "matches": [

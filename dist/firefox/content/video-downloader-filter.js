@@ -1,5 +1,4 @@
 (function() {
-  var playingUrls = new Set();
 
   function parseQuality(q) {
     if (q == null || q === '') return 0;
@@ -181,15 +180,4 @@
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   enforceFilter();
 
-  function pollPlayingVideos() {
-    try {
-      chrome.runtime.sendMessage({ type: 'get-playing-videos' }, function(response) {
-        if (chrome.runtime.lastError) return;
-        if (!response || !Array.isArray(response.playing)) return;
-        playingUrls = new Set(response.playing);
-      });
-    } catch(e) {}
-  }
-  setInterval(pollPlayingVideos, 1500);
-  setTimeout(pollPlayingVideos, 500);
 })();
