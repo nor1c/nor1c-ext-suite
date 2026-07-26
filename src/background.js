@@ -238,7 +238,9 @@ chrome.runtime.onInstalled.addListener(async () => {
     cookieConsent: true,
     disableAnimations: false,
     videoAutoHide: false,
-    videoAutoHideDelay: 3
+    videoAutoHideDelay: 3,
+    websiteBlockerRules: [],
+    websiteBlockerSchedule: { start: '09:00', end: '17:00' }
   };
   const stored = await chrome.storage.sync.get(Object.keys(defaults));
   const missing = {};
@@ -335,6 +337,93 @@ async function saveImageAsPng(srcUrl, tab) {
   if (!pngDataUrl) return;
   chrome.downloads.download({ url: pngDataUrl, filename });
 }
+
+// ── Website Blocker ──
+let websiteBlockerRules = [];
+let websiteBlockerSchedule = { start: '09:00', end: '17:00' };
+let websiteBlockerBlockedUrl = '';
+
+// Derive blocked.html url once the extension id is known
+function getBlockedUrl() {
+  if (!websiteBlockerBlockedUrl) {
+    websiteBlockerBlockedUrl = chrome.runtime.getURL('blocked.html');
+  }
+  return websiteBlockerBlockedUrl;
+}
+
+function isInBlockedRange(schedule) {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [startH, startM] = schedule.start.split(':').map(Number);
+  const [endH, endM] = schedule.end.split(':').map(Number);
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  } else {
+    // Overnight range (e.g. 22:00 - 06:00)
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+}
+
+function getMatchingRule(url) {
+  let hostname;
+  try {
+    hostname = new URL(url).hostname;
+  } catch (_) {
+    return null;
+  }
+
+  // Simple domain extraction: strip www prefix
+  const host = hostname.toLowerCase().replace(/^www\./, '');
+  const domain = host;
+  const domainLower = domain.toLowerCase();
+
+  return websiteBlockerRules.find(rule => {
+    if (!rule.enabled) return false;
+    if (domainLower !== rule.domain) {
+      // Also check if domain is a subdomain of rule.domain
+      if (!domainLower.endsWith('.' + rule.domain)) return false;
+      // But don't match on e.g. "notfacebook.com" for "facebook.com"
+      if (domainLower.length > rule.domain.length + 1 && domainLower[domainLower.length - rule.domain.length - 1] !== '.') return false;
+    }
+    return isInBlockedRange(websiteBlockerSchedule);
+  }) || null;
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(details => {
+  if (details.frameId !== 0) return; // Only top-level frames
+  if (!details.url) return;
+
+  const blockedUrl = getBlockedUrl();
+  if (details.url.startsWith(blockedUrl)) return; // Don't block the blocked page itself
+
+  const rule = getMatchingRule(details.url);
+  if (!rule) return;
+
+  const params = new URLSearchParams();
+  params.set('domain', rule.domain);
+  params.set('start', websiteBlockerSchedule.start);
+  params.set('end', websiteBlockerSchedule.end);
+
+  chrome.tabs.update(details.tabId, { url: blockedUrl + '?' + params.toString() }).catch(() => {});
+});
+
+chrome.storage.sync.get(['websiteBlockerRules', 'websiteBlockerSchedule'], result => {
+  websiteBlockerRules = result.websiteBlockerRules || [];
+  websiteBlockerSchedule = result.websiteBlockerSchedule || websiteBlockerSchedule;
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  if (changes.websiteBlockerRules) websiteBlockerRules = changes.websiteBlockerRules.newValue || [];
+  if (changes.websiteBlockerSchedule) {
+    websiteBlockerSchedule = changes.websiteBlockerSchedule.newValue || { start: '09:00', end: '17:00' };
+  }
+});
+// ── End Website Blocker ──
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'sync') return;

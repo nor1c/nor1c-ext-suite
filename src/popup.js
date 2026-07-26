@@ -22,7 +22,9 @@ const BACKUP_KEYS = [
   'videoControlsEnabledSites',
   'hiddenRules',
   'blockedSelectors',
-  'ytControlPanel'
+  'ytControlPanel',
+  'websiteBlockerRules',
+  'websiteBlockerSchedule'
 ];
 const YT_STRING_SETTING_KEYS = new Set([
   'enforceTheme',
@@ -81,6 +83,20 @@ function validateSetting(key, value) {
       if (YT_STRING_SETTING_KEYS.has(optionKey)) return typeof option === 'string';
       return false;
     });
+  }
+  if (key === 'websiteBlockerRules') {
+    if (!Array.isArray(value)) return false;
+    return value.every(rule =>
+      isPlainObject(rule) &&
+      typeof rule.id === 'string' && rule.id.length > 0 &&
+      typeof rule.domain === 'string' && rule.domain.length > 0 &&
+      typeof rule.enabled === 'boolean'
+    );
+  }
+  if (key === 'websiteBlockerSchedule') {
+    return isPlainObject(value) &&
+      typeof value.start === 'string' && /^\d{2}:\d{2}$/.test(value.start) &&
+      typeof value.end === 'string' && /^\d{2}:\d{2}$/.test(value.end);
   }
   return false;
 }
@@ -465,6 +481,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       chrome.tabs.sendMessage(tab.id, { type: "toggle-yt-panel" }).catch(function() {})
     }
   })
+
+  // Website Blocker toggle & panel opener
+  document.getElementById('website-blocker-panel-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('website-blocker-panel.html') });
+  });
 
 });
 

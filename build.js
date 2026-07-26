@@ -25,7 +25,13 @@ const COPY_FILES = [
   'tab-switcher.js',
   'youtube-control-panel.html',
   'youtube-control-panel.css',
-  'youtube-control-panel.js'
+  'youtube-control-panel.js',
+  'website-blocker-panel.html',
+  'website-blocker-panel.css',
+  'website-blocker-panel.js',
+  'blocked.html',
+  'blocked.css',
+  'blocked.js'
 ];
 
 const COPY_DIRS = [

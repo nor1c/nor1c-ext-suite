@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self';">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="blocked.css">
+  <title>Blocked — Nor1c Suite</title>
+</head>
+<body>
+  <div class="blocked-container">
+    <div class="blocked-card">
+      <div class="blocked-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        </svg>
+      </div>
+      <h1 class="blocked-title">Website Blocked</h1>
+      <p class="blocked-domain" id="blocked-domain"></p>
+      <p class="blocked-message" id="blocked-message"></p>
+      <p class="blocked-hint">This website is blocked by <strong>Nor1c Suite — Website Blocker</strong> during your focused hours.</p>
+      <p class="blocked-footer">You can adjust or disable this rule in the extension popup → Website Blocker.</p>
+    </div>
+  </div>
+  <script src="blocked.js"></script>
+</body>
+</html>

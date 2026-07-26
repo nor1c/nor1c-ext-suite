@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self';">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="website-blocker-panel.css">
+  <title>Website Blocker — Nor1c Suite</title>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">Website Blocker</h1>
+      <p class="subtitle">Block websites during specific hours so you can stay focused.</p>
+    </header>
+
+    <section class="add-section">
+      <h2 class="section-title">Blocking Schedule</h2>
+      <div class="time-row">
+        <div class="time-group">
+          <label for="blocked-start" class="time-label">Block from</label>
+          <input type="time" id="blocked-start" class="time-input" value="09:00">
+        </div>
+        <span class="time-sep">to</span>
+        <div class="time-group">
+          <label for="blocked-end" class="time-label">Block until</label>
+          <input type="time" id="blocked-end" class="time-input" value="17:00">
+        </div>
+      </div>
+      <p class="blocker-hint">This schedule applies to every enabled website below and can be changed anytime.</p>
+    </section>
+
+    <section class="add-section">
+      <h2 class="section-title">Add Website</h2>
+      <div class="add-row">
+        <input type="text" id="domain-input" class="domain-input" placeholder="e.g. facebook.com" autocomplete="off" spellcheck="false">
+        <button id="add-current-btn" class="btn btn-secondary">+ Current Site</button>
+      </div>
+      <button id="add-btn" class="btn btn-primary">Add Website</button>
+      <p id="add-error" class="error-msg" style="display:none;"></p>
+    </section>
+
+    <section class="rules-section">
+      <h2 class="section-title">Blocked Websites <span id="rules-count" class="count-badge">0</span></h2>
+      <div id="rules-list" class="rules-list">
+        <p id="rules-empty" class="empty-msg">No blocked websites yet.</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Rules are checked during page navigation. Set the time range when sites should be <strong>blocked</strong>.</p>
+    </footer>
+  </div>
+
+  <script src="lib/utils.js"></script>
+  <script src="website-blocker-panel.js"></script>
+</body>
+</html>
