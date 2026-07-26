@@ -69,6 +69,11 @@ test('YouTube embeds use hostname and pathname including nocookie', () => {
   assert.doesNotMatch(youtubeSource, /hostname\.indexOf\('youtube(?:-nocookie)?\.com\/embed'/);
 });
 
+test('background playback does not force hidden YouTube videos to resume after pause', () => {
+  assert.doesNotMatch(youtubeSource, /addEventListener\('pause'/);
+  assert.doesNotMatch(youtubeSource, /document\.hidden && cfg\.allowBackgroundPlay/);
+});
+
 test('YouTube mutation observer filters relevant nodes and keeps navigation triggers', () => {
   assert.match(youtubeSource, /mutations\.some\(mutationNeedsApply\)/);
   assert.match(youtubeSource, /node\.matches\(relevantMutationSelector\)/);

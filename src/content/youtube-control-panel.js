@@ -668,17 +668,6 @@ if (document.readyState === 'loading') {
       }
     }
 
-    if (cfg.allowBackgroundPlay) {
-      document.querySelectorAll('video').forEach(function(video) {
-        if (!video.dataset.nor1cBackgroundPlay) {
-          video.dataset.nor1cBackgroundPlay = '1'
-          video.addEventListener('pause', function() {
-            if (document.hidden && cfg.allowBackgroundPlay && !video.ended) video.play().catch(function() {})
-          })
-        }
-      })
-    }
-
     if (cfg.enforceTheme && cfg.enforceTheme !== 'default') {
       document.documentElement.setAttribute('dark', cfg.enforceTheme === 'dark' ? '' : null)
       if (cfg.enforceTheme === 'light') document.documentElement.removeAttribute('dark')
