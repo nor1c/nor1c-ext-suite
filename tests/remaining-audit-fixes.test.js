@@ -25,3 +25,8 @@ test('smooth scroll removes media tracking listeners when disabled', () => {
   }
   assert.match(source, /stopVideoTracking\(\);/);
 });
+
+test('smooth scroll ignores keyboard events already handled by the page or video controls', () => {
+  const source = read('src/content/smooth-scroll.js');
+  assert.match(source, /function onKeyDown\(e\) \{\s*if \(e\.defaultPrevented \|\|/);
+});

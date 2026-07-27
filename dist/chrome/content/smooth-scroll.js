@@ -172,7 +172,7 @@
   }
 
   function onKeyDown(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
 
     let delta = 0;
     if (e.key === 'PageDown') delta = window.innerHeight * 0.51;

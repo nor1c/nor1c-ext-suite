@@ -138,7 +138,7 @@ test('image blocker restores detached images before reinsertion', async () => {
 test('video controls attach and detach dynamic auto-hide listeners and cancel delayed shadow work', async () => {
   await withPage(async (page) => {
     await page.evaluateOnNewDocument(() => {
-      window.__storageListener = null;
+      window.__storageListeners = [];
       window.nor1cGetDomain = () => 'example.test';
       window.IntersectionObserver = class {
         observe() {}
@@ -157,19 +157,25 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
                   videoAutoHide: true,
                   videoAutoHideDelay: 30
                 });
+              } else if (keys.includes('smoothScroll')) {
+                callback({ smoothScroll: true });
               } else {
                 callback({ videoControlsEnabledSites: ['example.test'] });
               }
             }
           },
-          onChanged: { addListener(listener) { window.__storageListener = listener; } }
+          onChanged: { addListener(listener) { window.__storageListeners.push(listener); } }
         }
       };
     });
     await page.goto('about:blank');
     await page.addScriptTag({ path: path.join(root, 'src', 'content', 'video-controls.js') });
+    await page.addScriptTag({ path: path.join(root, 'src', 'content', 'smooth-scroll.js') });
 
     const result = await page.evaluate(async () => {
+      document.body.style.height = '3000px';
+      let scrollCalls = 0;
+      window.scrollTo = () => { scrollCalls += 1; };
       const video = document.createElement('video');
       const videoHost = document.createElement('div');
       videoHost.appendChild(video);
@@ -192,8 +198,10 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
       video.play = async () => { paused = false; video.dispatchEvent(new Event('play')); };
       video.pause = () => { paused = true; video.dispatchEvent(new Event('pause')); };
       video.dispatchEvent(new PointerEvent('pointerdown'));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+      const spaceEvent = new KeyboardEvent('keydown', { key: ' ', cancelable: true });
+      document.dispatchEvent(spaceEvent);
       const spaceHandled = !paused;
+      const spaceDefaultPrevented = spaceEvent.defaultPrevented;
       const mutePathBefore = controls.querySelector('[aria-label="Mute"] path').getAttribute('d');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm' }));
       const hotkeyMuted = video.muted;
@@ -223,7 +231,7 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
       await new Promise((resolve) => setTimeout(resolve));
       video.dispatchEvent(new MouseEvent('mouseenter'));
       const detached = !video.hasAttribute('controls');
-      window.__storageListener({ videoControls: { newValue: false } }, 'sync');
+      window.__storageListeners.forEach(listener => listener({ videoControls: { newValue: false } }, 'sync'));
       await new Promise((resolve) => setTimeout(resolve, 2100));
       return {
         hidden,
@@ -232,6 +240,8 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
         muted,
         controlUsesBorderBox,
         spaceHandled,
+        spaceDefaultPrevented,
+        scrollCallsAfterSpace: scrollCalls,
         hotkeyMuted,
         muteIconChanged,
         hotkeyFullscreen,
@@ -250,6 +260,8 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
       muted: false,
       controlUsesBorderBox: true,
       spaceHandled: true,
+      spaceDefaultPrevented: true,
+      scrollCallsAfterSpace: 0,
       hotkeyMuted: true,
       muteIconChanged: true,
       hotkeyFullscreen: true,
