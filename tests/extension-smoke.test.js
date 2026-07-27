@@ -53,10 +53,10 @@ test('built Chrome extension starts, registers privacy policies, and keeps downl
     await popup.waitForFunction(() => document.getElementById('video-download-toggle').checked === false);
     const popupState = await popup.evaluate(() => ({
       checked: document.getElementById('video-download-toggle').checked,
-      frame: document.getElementById('video-downloader-frame').getAttribute('src'),
+      list: Boolean(document.getElementById('video-sources-list')),
       section: document.getElementById('video-sources-section').style.display
     }));
-    assert.deepEqual(popupState, { checked: false, frame: 'about:blank', section: 'none' });
+    assert.deepEqual(popupState, { checked: false, list: true, section: 'none' });
     assert.deepEqual(errors, []);
 
     const enabled = await popup.evaluate(async () => {
@@ -64,6 +64,21 @@ test('built Chrome extension starts, registers privacy policies, and keeps downl
       return chrome.runtime.sendMessage({ type: 'ensure-video-downloader-background' });
     });
     assert.deepEqual(enabled, { loaded: true }, workerErrors.join('\n'));
+
+    const mediaPage = await browser.newPage();
+    await mediaPage.goto('https://example.com');
+    const mediaTabId = await popup.evaluate(async () => {
+      const tabs = await chrome.tabs.query({ url: 'https://example.com/' });
+      return tabs[0] && tabs[0].id;
+    });
+    assert.ok(mediaTabId !== undefined, 'media probe tab must exist');
+    await mediaPage.evaluate(() => fetch('/video-probe.mp4').catch(() => {}));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const captured = await popup.evaluate(tabId => chrome.runtime.sendMessage({
+      type: 'get-detected-video-sources',
+      tabId
+    }), mediaTabId);
+    assert.ok(captured.sources.some(source => source.url === 'https://example.com/video-probe.mp4'));
   } finally {
     await browser.close();
   }

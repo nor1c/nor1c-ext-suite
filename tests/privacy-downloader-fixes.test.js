@@ -97,6 +97,53 @@ test('privacy registration is browser-owned and downloader filename regex is esc
   assert.match(filenameFilter, /\\d\{3,4\}p\?/);
 });
 
+test('popup directly scans source URLs from playing video elements', () => {
+  const popup = read('src/popup.js');
+  const html = read('src/popup.html');
+  assert.match(popup, /chrome\.scripting\.executeScript/);
+  assert.match(popup, /!video\.paused && !video\.ended/);
+  assert.match(popup, /video\.currentSrc, video\.src/);
+  assert.match(popup, /hasPlayingVideo: playing\.length > 0/);
+  assert.match(popup, /get-detected-video-sources/);
+  assert.match(popup, /if \(hasPlayingVideo && urls\.length === 0\)/);
+  assert.match(popup, /playingFrameIds/);
+  assert.match(popup, /sort\(\(a, b\) => \(b\.contentLength \|\| 0\) - \(a\.contentLength \|\| 0\)\)/);
+  assert.match(popup, /rn\|sq\|part\|segment/);
+  assert.match(popup, /'bytestart', 'byteend', 'start', 'end', 'range'/);
+  assert.match(popup, /now - \(source\.detectedAt \|\| 0\) < 120000/);
+  assert.doesNotMatch(popup, /performance\.getEntriesByType\('resource'\)/);
+  assert.doesNotMatch(popup, /async function downloadDirectVideo/);
+  assert.doesNotMatch(popup, /File video lengkap tidak berhasil dibuat/);
+  assert.match(popup, /chrome\.downloads\.download\(options\)/);
+  assert.match(popup, /saveAs: false/);
+  assert.match(popup, /extensionByType/);
+  assert.match(popup, /sourceMetadata\.has\(source\.url\)/);
+  assert.match(popup, /async function downloadHls\(tabId, frameId/);
+  assert.match(popup, /frameIds: \[frameId\]/);
+  assert.match(popup, /#EXT-X-STREAM-INF/);
+  assert.match(popup, /#EXT-X-MAP/);
+  assert.match(popup, /new Blob\(parts/);
+  assert.match(popup, /Stream DASH memerlukan penggabungan audio dan video terpisah/);
+  assert.match(html, /id="video-sources-list"/);
+  assert.doesNotMatch(html, /video-downloader-frame/);
+});
+
+test('background captures media and streaming manifest network requests', () => {
+  const background = read('src/background.js');
+  assert.match(background, /details\.type === 'media'/);
+  assert.match(background, /m3u8\|mpd\|mp4/);
+  assert.match(background, /onBeforeRequest\.addListener\(rememberVideoSource/);
+  assert.match(background, /onHeadersReceived\.addListener/);
+  assert.match(background, /source\.contentType/);
+  assert.match(background, /source\.contentLength/);
+  assert.match(background, /source\.filename/);
+  assert.match(background, /function fullVideoUrl/);
+  assert.match(background, /'bytestart', 'byteend', 'start', 'end', 'range'/);
+  assert.match(background, /content-disposition/);
+  assert.match(background, /frameId: details\.frameId/);
+  assert.match(background, /msg\.type === 'get-detected-video-sources'/);
+});
+
 test('video downloader only exposes currently playing media without polling', () => {
   const background = read('src/background.js');
   const filter = read('src/content/video-downloader-filter.js');
@@ -105,6 +152,10 @@ test('video downloader only exposes currently playing media without polling', ()
 
   assert.match(background, /msg\.type === 'video-playback-state'/);
   assert.match(background, /__nor1cIsPlayingVideo/);
+  assert.match(background, /playingUrls\.has\(url\)/);
+  assert.match(background, /playingUrl\.startsWith\('blob:'\)/);
+  assert.match(background, /if \(url\.startsWith\('blob:'\)\) return \[url\]/);
+  assert.doesNotMatch(read('src/content/video-playing-tracker.js'), /filter\(url =>[^\n]+!url\.startsWith\('blob:'\)/);
   assert.match(downloader, /__nor1cFilterVideos\(resp\.videoLinks,e\.tabId\)/);
   assert.match(downloader, /__nor1cIsPlayingVideo\(tabId, item\.url\)/);
   assert.doesNotMatch(filter, /setInterval\s*\(/);

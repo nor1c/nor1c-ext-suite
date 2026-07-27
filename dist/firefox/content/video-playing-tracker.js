@@ -30,7 +30,7 @@
   function getVideoUrls(video) {
     const urls = [video.currentSrc, video.src];
     video.querySelectorAll('source').forEach(source => urls.push(source.src));
-    return urls.filter(url => typeof url === 'string' && url && !url.startsWith('blob:'));
+    return urls.filter(url => typeof url === 'string' && url);
   }
 
   function getPlayingUrls() {

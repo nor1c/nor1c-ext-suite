@@ -152,63 +152,249 @@ document.addEventListener('DOMContentLoaded', async () => {
     siteCard.style.display = videoControlsOn && currentDomain ? '' : 'none';
   }
 
-  let frameResizeTimer = null;
-  let frameResizeObserver = null;
+  function videoFilename(url, index, metadata) {
+    const serverName = metadata && metadata.filename;
+    if (serverName && /\.(?:mp4|m4v|webm|mov|flv|ogv|ts)$/i.test(serverName)) return serverName;
+    try {
+      const name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || '');
+      if (/\.(?:mp4|m4v|webm|mov|flv|ogv|ts)$/i.test(name)) return name;
+    } catch (_) {}
+    const contentType = metadata && metadata.contentType;
+    const extensionByType = {
+      'video/mp4': '.mp4',
+      'video/x-m4v': '.m4v',
+      'video/webm': '.webm',
+      'video/quicktime': '.mov',
+      'video/x-flv': '.flv',
+      'video/ogg': '.ogv',
+      'video/mp2t': '.ts'
+    };
+    return `video-${index + 1}${extensionByType[contentType] || '.mp4'}`;
+  }
 
-  async function updateVideoDownloaderFrame(videoDownloadOn) {
-    const section = document.getElementById('video-sources-section');
-    const frame = document.getElementById('video-downloader-frame');
-    if (videoDownloadOn) {
-      const response = await chrome.runtime.sendMessage({ type: 'ensure-video-downloader-background' }).catch(() => null);
-      if (!response || !response.loaded) {
-        section.style.display = 'none';
-        return;
+  function isHlsUrl(url) {
+    return /\.m3u8(?:$|[?#])/i.test(url);
+  }
+
+  async function downloadHls(tabId, frameId, manifestUrl, filename) {
+    const results = await chrome.scripting.executeScript({
+      target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] },
+      args: [manifestUrl, filename],
+      func: async (initialUrl, outputName) => {
+        const readPlaylist = async url => {
+          const response = await fetch(url, { credentials: 'include' });
+          if (!response.ok) throw new Error(`Manifest HTTP ${response.status}`);
+          return { url: response.url || url, text: await response.text() };
+        };
+        let playlist = await readPlaylist(initialUrl);
+        const variants = [];
+        const masterLines = playlist.text.split(/\r?\n/);
+        for (let i = 0; i < masterLines.length; i++) {
+          if (!masterLines[i].startsWith('#EXT-X-STREAM-INF:')) continue;
+          const bandwidth = Number((masterLines[i].match(/BANDWIDTH=(\d+)/i) || [0, 0])[1]);
+          const next = masterLines.slice(i + 1).find(line => line && !line.startsWith('#'));
+          if (next) variants.push({ bandwidth, url: new URL(next, playlist.url).href });
+        }
+        if (variants.length) {
+          variants.sort((a, b) => b.bandwidth - a.bandwidth);
+          playlist = await readPlaylist(variants[0].url);
+        }
+        if (/#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(playlist.text)) {
+          throw new Error('HLS terenkripsi tidak dapat digabung langsung');
+        }
+        const segmentUrls = [];
+        let initUrl = '';
+        for (const line of playlist.text.split(/\r?\n/)) {
+          const map = line.match(/^#EXT-X-MAP:.*URI="([^"]+)"/i);
+          if (map) initUrl = new URL(map[1], playlist.url).href;
+          if (line && !line.startsWith('#')) segmentUrls.push(new URL(line, playlist.url).href);
+        }
+        if (!segmentUrls.length) throw new Error('Manifest tidak memiliki segmen video');
+        const urls = initUrl ? [initUrl, ...segmentUrls] : segmentUrls;
+        const parts = [];
+        for (let i = 0; i < urls.length; i += 6) {
+          const batch = await Promise.all(urls.slice(i, i + 6).map(async url => {
+            const response = await fetch(url, { credentials: 'include' });
+            if (!response.ok) throw new Error(`Segmen HTTP ${response.status}`);
+            return response.arrayBuffer();
+          }));
+          parts.push(...batch);
+        }
+        const isMp4 = Boolean(initUrl);
+        const blob = new Blob(parts, { type: isMp4 ? 'video/mp4' : 'video/mp2t' });
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = outputName.replace(/\.mp4$/i, isMp4 ? '.mp4' : '.ts');
+        anchor.style.display = 'none';
+        document.documentElement.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+        return { segments: segmentUrls.length };
       }
-      section.style.display = '';
-      frame.style.display = '';
-      if (!frame.src || frame.src === 'about:blank') frame.src = 'video-downloader-popup.html';
-      startFrameResize(frame);
-    } else {
-      section.style.display = 'none';
-      frame.style.display = 'none';
-      stopFrameResize();
+    });
+    if (!results.some(result => result.result && result.result.segments)) {
+      throw new Error('HLS tidak berhasil diproses pada tab aktif');
     }
   }
 
-  function startFrameResize(frame) {
-    stopFrameResize();
-    const section = document.getElementById('video-sources-section');
-    frameResizeTimer = setInterval(function() {
-      try {
-        const body = frame.contentDocument && frame.contentDocument.body;
-        if (!body) return;
-        clearInterval(frameResizeTimer);
-        frameResizeTimer = null;
+  function sourceKind(source) {
+    const url = source.url || '';
+    const contentType = source.contentType || '';
+    if (/\.m3u8(?:$|[?#])/i.test(url) || /(?:mpegurl|vnd\.apple\.mpegurl)/i.test(contentType)) return 'hls';
+    if (/\.mpd(?:$|[?#])/i.test(url) || /dash\+xml/i.test(contentType)) return 'dash';
+    if (/\.(?:m4s|ts)(?:$|[?#])/i.test(url)) return 'segment';
+    if (/^video\//i.test(contentType) || source.type === 'media') return 'file';
+    return 'unknown';
+  }
 
-        const resizeFrame = function() {
-          const videos = frame.contentDocument.querySelectorAll('.videos-list .video');
-          if (videos.length === 0) {
-            section.style.display = 'none';
-            return;
-          }
-          section.style.display = '';
-          const h = body.scrollHeight;
-          if (h > 0 && frame.style.height !== h + 'px') {
-            frame.style.height = h + 'px';
-          }
+  function selectCurrentNetworkSource(sources, frameIds) {
+    const now = Date.now();
+    const candidates = sources
+      .filter(source => source && typeof source.url === 'string' && /^https?:/i.test(source.url))
+      .filter(source => !frameIds.length || frameIds.includes(source.frameId))
+      .filter(source => now - (source.detectedAt || 0) < 120000)
+      .map(source => ({ ...source, kind: sourceKind(source) }))
+      .filter(source => source.kind !== 'segment' && source.kind !== 'unknown')
+      .sort((a, b) => (b.detectedAt || 0) - (a.detectedAt || 0));
+    const hls = candidates.find(source => source.kind === 'hls');
+    const completeFiles = candidates
+      .filter(source => source.kind === 'file')
+      .filter(source => !/[?&](?:rn|sq|part|segment)=/i.test(source.url))
+      .sort((a, b) => (b.contentLength || 0) - (a.contentLength || 0));
+    return hls || completeFiles[0] || candidates.find(source => source.kind === 'dash') || null;
+  }
+
+  async function scanPlayingVideoSources() {
+    const list = document.getElementById('video-sources-list');
+    const empty = document.getElementById('video-sources-empty');
+    list.replaceChildren();
+    empty.textContent = 'Memindai video yang sedang diputar…';
+    empty.style.display = '';
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || tab.id === undefined) {
+      empty.textContent = 'Tab aktif tidak dapat dipindai.';
+      return;
+    }
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: () => {
+        const playing = Array.from(document.querySelectorAll('video'))
+          .filter(video => !video.paused && !video.ended);
+        return {
+          hasPlayingVideo: playing.length > 0,
+          directUrls: playing
+            .flatMap(video => [video.currentSrc, video.src, ...Array.from(video.querySelectorAll('source'), source => source.src)])
+            .filter(url => typeof url === 'string' && /^https?:/i.test(url))
         };
+      }
+    }).catch(() => []);
 
-        resizeFrame();
-        frameResizeObserver = new MutationObserver(resizeFrame);
-        frameResizeObserver.observe(body, { childList: true, subtree: true });
-      } catch(e) {}
-    }, 300);
+    const frameStates = results
+      .map(result => result.result)
+      .filter(result => result && typeof result === 'object');
+    const playingResults = results.filter(result => result.result && result.result.hasPlayingVideo);
+    const hasPlayingVideo = playingResults.length > 0;
+    const playingFrameIds = playingResults.map(result => result.frameId);
+    const directSources = playingResults.flatMap(result =>
+      (Array.isArray(result.result.directUrls) ? result.result.directUrls : [])
+        .map(url => {
+          try {
+            const parsed = new URL(url);
+            parsed.hash = '';
+            ['bytestart', 'byteend', 'start', 'end', 'range'].forEach(key => parsed.searchParams.delete(key));
+            url = parsed.href;
+          } catch (_) {}
+          return { url, frameId: result.frameId, type: 'media', contentType: '', contentLength: 0 };
+        })
+    );
+    let urls = Array.from(new Set(directSources.map(source => source.url)));
+    const sourceMetadata = new Map(directSources.map(source => [source.url, source]));
+    const detected = await chrome.runtime.sendMessage({
+      type: 'get-detected-video-sources',
+      tabId: tab.id
+    }).catch(() => ({ sources: [] }));
+    const detectedSources = detected && Array.isArray(detected.sources) ? detected.sources : [];
+
+    // Enrich direct element URLs with response headers so extensionless media
+    // receives the correct playable filename extension.
+    for (const source of detectedSources) {
+      if (sourceMetadata.has(source.url)) sourceMetadata.set(source.url, source);
+    }
+
+    // A blob/MediaSource player has no HTTP URL on the element. In that case,
+    // use only the best current manifest/media request instead of listing every
+    // segment and every video request previously seen in the tab.
+    if (hasPlayingVideo && urls.length === 0) {
+      const current = selectCurrentNetworkSource(detectedSources, playingFrameIds);
+      if (current) {
+        urls = [current.url];
+        sourceMetadata.set(current.url, current);
+      }
+    }
+    empty.style.display = urls.length ? 'none' : '';
+    empty.textContent = 'Belum ada source terdeteksi. Putar video lalu tekan Scan ulang.';
+
+    urls.forEach((url, index) => {
+      const row = document.createElement('div');
+      row.className = 'video-source-row';
+      const info = document.createElement('div');
+      info.className = 'video-source-info';
+      const name = document.createElement('strong');
+      const metadata = sourceMetadata.get(url) || { url, contentType: '', type: '' };
+      name.textContent = videoFilename(url, index, metadata);
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.textContent = url;
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.textContent = 'Download';
+      download.addEventListener('click', async () => {
+        download.disabled = true;
+        const originalText = download.textContent;
+        try {
+          const kind = sourceKind(metadata);
+          if (isHlsUrl(url) || kind === 'hls') {
+            download.textContent = 'Memproses…';
+            await downloadHls(tab.id, metadata.frameId, url, videoFilename(url, index, metadata));
+          } else if (/\.mpd(?:$|[?#])/i.test(url) || kind === 'dash') {
+            throw new Error('Stream DASH memerlukan penggabungan audio dan video terpisah');
+          } else {
+            const options = {
+              url,
+              filename: videoFilename(url, index, metadata),
+              saveAs: false,
+              conflictAction: 'uniquify'
+            };
+            const downloadId = await chrome.downloads.download(options);
+            if (downloadId === undefined) throw new Error('Browser menolak download video');
+          }
+        } catch (error) {
+          empty.textContent = error && error.message ? error.message : 'Video gagal diproses.';
+          empty.style.display = '';
+        } finally {
+          download.disabled = false;
+          download.textContent = originalText;
+        }
+      });
+      info.append(name, link);
+      row.append(info, download);
+      list.appendChild(row);
+    });
   }
 
-  function stopFrameResize() {
-    if (frameResizeTimer) { clearInterval(frameResizeTimer); frameResizeTimer = null; }
-    if (frameResizeObserver) { frameResizeObserver.disconnect(); frameResizeObserver = null; }
+  async function updateVideoDownloaderFrame(videoDownloadOn) {
+    const section = document.getElementById('video-sources-section');
+    section.style.display = videoDownloadOn ? '' : 'none';
+    if (videoDownloadOn) await scanPlayingVideoSources();
   }
+
+  document.getElementById('video-sources-refresh').addEventListener('click', scanPlayingVideoSources);
 
   function updateElementHiderVisibility(on) {
     document.getElementById('picker-section').style.display = on ? '' : 'none';
@@ -263,25 +449,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     sendTabTitle(tab.title);
   }
 
-  function sendTabTitle(title) {
-    const frame = document.getElementById('video-downloader-frame');
-    if (!title || !frame) return;
-    function post(t) {
-      try { frame.contentWindow.postMessage({ type: 'tab-title', title: t }, chrome.runtime.getURL('')); } catch(e) {}
-    }
-    post(title);
-    setTimeout(function() { post(title); }, 500);
-    setTimeout(function() {
-      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        if (tabs && tabs[0] && tabs[0].title) post(tabs[0].title);
-      });
-    }, 3000);
-    setTimeout(function() {
-      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        if (tabs && tabs[0] && tabs[0].title) post(tabs[0].title);
-      });
-    }, 6000);
-  }
+  function sendTabTitle() {}
 
   siteToggle.addEventListener('change', async e => {
     if (!currentDomain) return;

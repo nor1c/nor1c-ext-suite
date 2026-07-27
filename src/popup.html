@@ -47,8 +47,10 @@
       <span class="toggle-label">Video Download</span>
       <label class="switch"><input type="checkbox" id="video-download-toggle"><span class="slider"></span></label>
     </div>
-    <div id="video-sources-section" style="display:none;">
-      <iframe id="video-downloader-frame" src="about:blank" style="width:100%;height:0;border:none;display:block;"></iframe>
+    <div id="video-sources-section" class="video-sources-section" style="display:none;">
+      <div class="video-sources-header"><span>Video sedang diputar</span><button id="video-sources-refresh" type="button">Scan ulang</button></div>
+      <div id="video-sources-list" class="video-sources-list"></div>
+      <div id="video-sources-empty" class="video-sources-empty" style="display:none;">Tidak ada source video aktif.</div>
     </div>
     <div class="toggle-card toggle-card--action">
       <span class="toggle-label">YouTube Panel</span>

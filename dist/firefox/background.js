@@ -2,21 +2,116 @@ let videoDownloadEnabled = true;
 let downloaderLoadPromise = null;
 const downloaderFrames = new Set();
 const playingVideosByTab = new Map();
+const detectedVideoSourcesByTab = new Map();
+const MAX_VIDEO_SOURCES_PER_TAB = 100;
 self.__nor1cVideoDownloadEnabled = true;
 self.__nor1cPlayingVideos = playingVideosByTab;
 self.__nor1cIsPlayingVideo = (tabId, url) => {
-  if (!url || url.startsWith('blob:')) return false;
+  if (!url) return false;
   const frames = playingVideosByTab.get(tabId);
   if (!frames) return false;
   const playingUrls = new Set(Array.from(frames.values()).flatMap(urls => Array.from(urls)));
+  if (playingUrls.has(url)) return true;
+  // MediaSource players expose only a blob URL on the <video>; their actual
+  // manifest/segment URLs are discovered by the downloader's network scanner.
+  if (Array.from(playingUrls).some(playingUrl => playingUrl.startsWith('blob:'))) return true;
+  if (url.startsWith('blob:')) return false;
   try {
     const candidate = new URL(url);
     candidate.hash = '';
     return playingUrls.has(candidate.href);
   } catch (_) {
-    return playingUrls.has(url);
+    return false;
   }
 };
+
+function isLikelyVideoSource(details) {
+  if (!details || !details.url || !/^https?:/i.test(details.url)) return false;
+  if (details.type === 'media') return true;
+  const path = details.url.split('#')[0].split('?')[0];
+  return /\.(?:m3u8|mpd|mp4|m4v|webm|mov|flv|ogv)(?:$|\/)/i.test(path) ||
+    /(?:videoplayback|video[_-]?manifest|manifest\/video|playlist\.m3u8)/i.test(details.url);
+}
+
+function normalizedVideoUrl(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    return parsed.href;
+  } catch (_) {
+    return url;
+  }
+}
+
+function fullVideoUrl(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    ['bytestart', 'byteend', 'start', 'end', 'range'].forEach(key => parsed.searchParams.delete(key));
+    return parsed.href;
+  } catch (_) {
+    return url;
+  }
+}
+
+function persistVideoSources(tabId, sources) {
+  detectedVideoSourcesByTab.set(tabId, sources);
+  if (chrome.storage.session) {
+    chrome.storage.session.set({
+      ['videoSources:' + tabId]: Array.from(sources.values())
+    }).catch(() => {});
+  }
+}
+
+function rememberVideoSource(details) {
+  if (!videoDownloadEnabled || details.tabId < 0 || !isLikelyVideoSource(details)) return;
+  const requestUrl = normalizedVideoUrl(details.url);
+  const url = fullVideoUrl(requestUrl);
+  const sources = detectedVideoSourcesByTab.get(details.tabId) || new Map();
+  const previous = sources.get(url);
+  sources.delete(url);
+  sources.set(url, {
+    url,
+    requestUrl,
+    isPartial: url !== requestUrl,
+    type: details.type || '',
+    frameId: details.frameId,
+    detectedAt: Date.now(),
+    contentType: (previous && previous.contentType) || '',
+    contentLength: (previous && previous.contentLength) || 0,
+    filename: (previous && previous.filename) || ''
+  });
+  while (sources.size > MAX_VIDEO_SOURCES_PER_TAB) sources.delete(sources.keys().next().value);
+  persistVideoSources(details.tabId, sources);
+}
+
+function rememberVideoResponse(details) {
+  if (details.tabId < 0) return;
+  const sources = detectedVideoSourcesByTab.get(details.tabId);
+  const source = sources && sources.get(fullVideoUrl(details.url));
+  if (!source) return;
+  for (const header of details.responseHeaders || []) {
+    const name = String(header.name || '').toLowerCase();
+    if (name === 'content-type') source.contentType = String(header.value || '').split(';')[0].trim().toLowerCase();
+    if (name === 'content-length') source.contentLength = Number(header.value) || 0;
+    if (name === 'content-disposition') {
+      const value = String(header.value || '');
+      const utf8 = value.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = value.match(/filename="?([^";]+)"?/i);
+      try { source.filename = decodeURIComponent((utf8 && utf8[1]) || (plain && plain[1]) || ''); } catch (_) {}
+    }
+  }
+  persistVideoSources(details.tabId, sources);
+}
+
+if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {
+  chrome.webRequest.onBeforeRequest.addListener(rememberVideoSource, { urls: ['<all_urls>'] });
+  chrome.webRequest.onHeadersReceived.addListener(
+    rememberVideoResponse,
+    { urls: ['<all_urls>'] },
+    ['responseHeaders']
+  );
+}
 
 const originalWebRequestAddListener = chrome.webRequest && chrome.webRequest.onBeforeRequest && chrome.webRequest.onBeforeRequest.addListener;
 if (originalWebRequestAddListener) {
@@ -149,7 +244,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const tabId = sender.tab.id;
     const playing = Array.isArray(msg.playing) ? msg.playing : [];
     const normalized = playing.flatMap(url => {
-      if (typeof url !== 'string' || !url || url.startsWith('blob:')) return [];
+      if (typeof url !== 'string' || !url) return [];
+      if (url.startsWith('blob:')) return [url];
       try {
         const parsed = new URL(url);
         parsed.hash = '';
@@ -165,6 +261,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (frames.size > 0) playingVideosByTab.set(tabId, frames);
     else playingVideosByTab.delete(tabId);
     chrome.runtime.sendMessage({ action: 'video-added' }).catch(() => {});
+  }
+  if (msg.type === 'get-detected-video-sources') {
+    const tabId = Number(msg.tabId);
+    const sources = detectedVideoSourcesByTab.get(tabId);
+    if (sources || !chrome.storage.session) {
+      sendResponse({ sources: sources ? Array.from(sources.values()) : [] });
+      return false;
+    }
+    chrome.storage.session.get('videoSources:' + tabId).then(result => {
+      sendResponse({ sources: result['videoSources:' + tabId] || [] });
+    }).catch(() => sendResponse({ sources: [] }));
+    return true;
   }
   if (msg.type === 'get-playing-videos') {
     chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => {
@@ -187,6 +295,8 @@ function clearDownloaderFrames(tabId) {
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete badgeCounts[tabId];
   playingVideosByTab.delete(tabId);
+  detectedVideoSourcesByTab.delete(tabId);
+  if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
   clearDownloaderFrames(tabId);
 });
 
@@ -194,6 +304,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'loading' || changeInfo.url) {
     badgeCounts[tabId] = {};
     playingVideosByTab.delete(tabId);
+    detectedVideoSourcesByTab.delete(tabId);
+    if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
     clearDownloaderFrames(tabId);
     updateBadge(tabId);
   }
