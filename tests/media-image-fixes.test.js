@@ -274,6 +274,89 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
   });
 });
 
+test('video controls hide fixed overlays for offscreen and CSS-hidden videos', async () => {
+  await withPage(async (page) => {
+    await page.evaluateOnNewDocument(() => {
+      window.nor1cGetDomain = () => 'example.test';
+      window.chrome = {
+        runtime: { onMessage: { addListener() {} } },
+        storage: {
+          sync: {
+            get(_keys, callback) {
+              callback({ videoControls: true, videoControlsEnabledSites: ['example.test'] });
+            }
+          },
+          onChanged: { addListener() {} }
+        }
+      };
+    });
+    await page.goto('about:blank');
+    await page.setContent('<div id="host"><video id="video" style="display:block;width:640px;height:360px"></video></div><div style="height:2000px"></div>');
+    await page.addScriptTag({ path: path.join(root, 'src', 'content', 'video-controls.js') });
+    await page.waitForSelector('.nor1c-player-controls');
+
+    const states = await page.evaluate(async () => {
+      const wait = () => new Promise(resolve => setTimeout(resolve, 100));
+      const video = document.getElementById('video');
+      const host = document.getElementById('host');
+      const controls = document.querySelector('.nor1c-player-controls');
+      const visibleInitially = !controls.hidden;
+
+      window.scrollTo(0, 340);
+      window.dispatchEvent(new Event('scroll'));
+      await wait();
+      const hiddenWhenOnlySliverRemains = controls.hidden && getComputedStyle(controls).display === 'none' && controls.style.getPropertyPriority('display') === 'important';
+
+      window.scrollTo(0, 1000);
+      window.dispatchEvent(new Event('scroll'));
+      await wait();
+      const hiddenOffscreen = controls.hidden && getComputedStyle(controls).display === 'none' && controls.style.getPropertyPriority('display') === 'important';
+
+      window.scrollTo(0, 0);
+      window.dispatchEvent(new Event('scroll'));
+      await wait();
+      const visibleAfterScroll = !controls.hidden;
+
+      host.style.visibility = 'hidden';
+      await wait();
+      const hiddenWithAncestor = controls.hidden && getComputedStyle(controls).display === 'none' && controls.style.getPropertyPriority('display') === 'important';
+
+      host.style.visibility = 'visible';
+      await wait();
+      const visibleAfterRestore = !controls.hidden;
+
+      const cover = document.createElement('div');
+      cover.style.cssText = 'position:fixed;inset:0;background:white;z-index:2147483647';
+      document.body.appendChild(cover);
+      window.dispatchEvent(new Event('scroll'));
+      await wait();
+      const hiddenWhenCovered = controls.hidden && getComputedStyle(controls).display === 'none' && controls.style.getPropertyPriority('display') === 'important';
+      cover.remove();
+      window.dispatchEvent(new Event('scroll'));
+      await wait();
+      const visibleAfterUncover = !controls.hidden;
+
+      video.hidden = true;
+      await wait();
+      const hiddenByAttribute = controls.hidden && getComputedStyle(controls).display === 'none' && controls.style.getPropertyPriority('display') === 'important';
+
+      return { visibleInitially, hiddenWhenOnlySliverRemains, hiddenOffscreen, visibleAfterScroll, hiddenWithAncestor, visibleAfterRestore, hiddenWhenCovered, visibleAfterUncover, hiddenByAttribute };
+    });
+
+    assert.deepEqual(states, {
+      visibleInitially: true,
+      hiddenWhenOnlySliverRemains: true,
+      hiddenOffscreen: true,
+      visibleAfterScroll: true,
+      hiddenWithAncestor: true,
+      visibleAfterRestore: true,
+      hiddenWhenCovered: true,
+      visibleAfterUncover: true,
+      hiddenByAttribute: true
+    });
+  });
+});
+
 test('video lifecycle fixes retain no permanent tracker polling or uncancelled shadow walk', () => {
   const tracker = source('video-playing-tracker.js');
   const controls = source('video-controls.js');
