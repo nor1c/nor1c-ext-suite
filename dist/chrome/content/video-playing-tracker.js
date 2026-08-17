@@ -1,31 +1,5 @@
 (function () {
   const playingVideos = new Set();
-  const visibilityObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting || entry.intersectionRatio === 0 || !isRendered(entry.target)) pauseVideo(entry.target);
-    });
-  }, { threshold: 0.01 });
-
-  function isRendered(video) {
-    const style = getComputedStyle(video);
-    return video.getClientRects().length > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
-  }
-
-  function isInViewport(video) {
-    const rect = video.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
-  }
-
-  function pauseVideo(video) {
-    visibilityObserver.unobserve(video);
-    playingVideos.delete(video);
-    if (!video.paused) video.pause();
-  }
-
-  function pauseAllVideos() {
-    Array.from(playingVideos).forEach(pauseVideo);
-    publishState();
-  }
 
   function getVideoUrls(video) {
     const urls = [video.currentSrc, video.src];
@@ -56,14 +30,8 @@
     const video = event.target;
     if (!(video instanceof HTMLVideoElement)) return;
     if (event.type === 'playing') {
-      if (document.hidden || !isRendered(video) || !isInViewport(video)) {
-        pauseVideo(video);
-      } else {
-        playingVideos.add(video);
-        visibilityObserver.observe(video);
-      }
+      playingVideos.add(video);
     } else {
-      visibilityObserver.unobserve(video);
       playingVideos.delete(video);
     }
     publishState();
@@ -72,10 +40,6 @@
   ['playing', 'pause', 'ended', 'emptied', 'waiting', 'stalled', 'abort'].forEach(type => {
     document.addEventListener(type, handlePlaybackEvent, true);
   });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pauseAllVideos();
-  });
-
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.type === 'get-playing-videos') {
       sendResponse({ playing: getPlayingUrls() });

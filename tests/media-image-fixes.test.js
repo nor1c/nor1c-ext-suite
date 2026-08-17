@@ -357,6 +357,54 @@ test('video controls hide fixed overlays for offscreen and CSS-hidden videos', a
   });
 });
 
+test('video playback tracker never pauses background or offscreen media', async () => {
+  await withPage(async (page) => {
+    await page.evaluateOnNewDocument(() => {
+      window.__playbackMessages = [];
+      window.chrome = {
+        runtime: {
+          sendMessage(message) {
+            window.__playbackMessages.push(message);
+            return Promise.resolve();
+          },
+          onMessage: { addListener() {} }
+        }
+      };
+    });
+    await page.goto('about:blank');
+    await page.addScriptTag({ path: path.join(root, 'src', 'content', 'video-playing-tracker.js') });
+
+    const result = await page.evaluate(async () => {
+      const video = document.createElement('video');
+      video.src = 'https://example.test/background.mp4';
+      video.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px';
+      document.body.appendChild(video);
+
+      let pauseCalls = 0;
+      Object.defineProperties(video, {
+        paused: { configurable: true, get: () => false },
+        ended: { configurable: true, get: () => false },
+        readyState: { configurable: true, get: () => 4 },
+        currentSrc: { configurable: true, get: () => video.src }
+      });
+      video.pause = () => { pauseCalls += 1; };
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+
+      video.dispatchEvent(new Event('playing'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise(resolve => setTimeout(resolve));
+
+      return { pauseCalls, messages: window.__playbackMessages };
+    });
+
+    assert.equal(result.pauseCalls, 0);
+    assert.ok(result.messages.some(message =>
+      message.type === 'video-playback-state' &&
+      message.playing.includes('https://example.test/background.mp4')
+    ));
+  });
+});
+
 test('video lifecycle fixes retain no permanent tracker polling or uncancelled shadow walk', () => {
   const tracker = source('video-playing-tracker.js');
   const controls = source('video-controls.js');
@@ -367,12 +415,12 @@ test('video lifecycle fixes retain no permanent tracker polling or uncancelled s
   assert.doesNotMatch(tracker, /querySelectorAll\('video'\)/);
   assert.match(tracker, /document\.addEventListener\(type, handlePlaybackEvent, true\)/);
   assert.match(tracker, /event\.type === 'playing'/);
-  assert.match(tracker, /new IntersectionObserver/);
-  assert.match(tracker, /if \(!entry\.isIntersecting \|\| entry\.intersectionRatio === 0/);
-  assert.match(tracker, /document\.addEventListener\('visibilitychange'/);
+  assert.doesNotMatch(tracker, /new IntersectionObserver/);
+  assert.doesNotMatch(tracker, /document\.hidden/);
+  assert.doesNotMatch(tracker, /addEventListener\('visibilitychange'/);
   assert.doesNotMatch(tracker, /addEventListener\('blur'/);
   assert.doesNotMatch(tracker, /document\.hasFocus\(\)/);
-  assert.match(tracker, /document\.hidden \|\| !isRendered\(video\)/);
+  assert.doesNotMatch(tracker, /video\.pause\s*\(/);
   assert.match(controls, /walkTimeout = setTimeout\(walkShadowRoots, 2000\)/);
   assert.match(controls, /clearTimeout\(walkTimeout\)/);
   assert.match(controls, /if \(!active\) return;/);
