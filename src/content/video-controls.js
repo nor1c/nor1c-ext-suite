@@ -1,8 +1,9 @@
 (function () {
   let active = false;
+  let playerMode = 'custom';
   let observer = null;
   let walkTimeout = null;
-  const timestamps = new WeakMap();
+  let timestamps = new WeakMap();
   let overlaysDone = new WeakSet();
   let volumeState = new WeakMap();
   const syncing = new WeakSet();
@@ -163,11 +164,6 @@
   function forceControls(video) {
     if (!video || video.tagName !== 'VIDEO') return;
 
-    const now = Date.now();
-    const last = timestamps.get(video) || 0;
-    if (now - last < 250) return;
-    timestamps.set(video, now);
-
     if (!originalVideoState.has(video)) {
       originalVideoState.set(video, {
         controls: video.hasAttribute('controls'),
@@ -177,6 +173,19 @@
         playbackRate: video.playbackRate
       });
     }
+    if (playerMode === 'basic') {
+      video.controls = true;
+      if (!video.hasAttribute('controls')) video.setAttribute('controls', '');
+      video.removeAttribute('nor1c');
+      removeCustomControls(video);
+      return;
+    }
+
+    const now = Date.now();
+    const last = timestamps.get(video) || 0;
+    if (now - last < 250) return;
+    timestamps.set(video, now);
+
     video.controls = false;
     video.removeAttribute('controls');
     video.setAttribute('controlsList', 'nodownload noplaybackrate');
@@ -647,6 +656,11 @@
   let overlayInterval = null;
 
   function enforceVideo(v) {
+    if (playerMode === 'basic') {
+      v.controls = true;
+      if (!v.hasAttribute('controls')) v.setAttribute('controls', '');
+      return;
+    }
     v.controls = false;
     v.removeAttribute('controls');
     const saved = volumeState.get(v);
@@ -808,7 +822,7 @@
     processAll();
     walkTimeout = setTimeout(walkShadowRoots, 2000);
     startObserver();
-    startVideoObserver(); startOverlayPoll();
+    if (playerMode === 'custom') { startVideoObserver(); startOverlayPoll(); }
     window.addEventListener('scroll', scheduleControlPositions, true);
     window.addEventListener('resize', scheduleControlPositions);
     document.addEventListener('transitionrun', scheduleControlPositions, true);
@@ -816,8 +830,8 @@
     document.addEventListener('animationstart', scheduleControlPositions, true);
     document.addEventListener('animationend', scheduleControlPositions, true);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('keydown', handleVideoHotkey);
-    startAutoHide();
+    if (playerMode === 'custom') document.addEventListener('keydown', handleVideoHotkey);
+    if (playerMode === 'custom') startAutoHide();
   }
 
   function restoreElement(element, style) {
@@ -867,6 +881,7 @@
     originalElementStyles.clear();
     mutedObservers.clear();
     volumeState = new WeakMap();
+    timestamps = new WeakMap();
     overlaysDone = new WeakSet();
     styleEl.remove();
   }
@@ -874,10 +889,11 @@
   function init() {
     const domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay'], function (result) {
+    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode'], function (result) {
       const enabled = result.videoControls !== undefined ? result.videoControls : false;
       const enabledSites = result.videoControlsEnabledSites || [];
 
+      playerMode = result.videoPlayerMode === 'basic' ? 'basic' : 'custom';
       autoHideEnabled = result.videoAutoHide === true;
       autoHideDelay = typeof result.videoAutoHideDelay === 'number' ? result.videoAutoHideDelay : 3;
 
@@ -896,9 +912,16 @@
         });
       }
 
+      if (changes.videoPlayerMode) {
+        const wasActive = active;
+        if (wasActive) stop();
+        playerMode = changes.videoPlayerMode.newValue === 'basic' ? 'basic' : 'custom';
+        if (wasActive) start();
+      }
+
       if (changes.videoAutoHide) {
         autoHideEnabled = changes.videoAutoHide.newValue === true;
-        if (autoHideEnabled && active) startAutoHide();
+        if (autoHideEnabled && active && playerMode === 'custom') startAutoHide();
         else if (!autoHideEnabled && autoHideActive) stopAutoHide();
       }
 

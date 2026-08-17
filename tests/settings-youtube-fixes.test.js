@@ -29,6 +29,7 @@ test('backup validation accepts consumed setting shapes', () => {
     imageBlocker: true,
     blockLocation: false,
     videoAutoHideDelay: 10,
+    videoPlayerMode: 'basic',
     videoControlsEnabledSites: ['example.com'],
     blockedSelectors: '.advert',
     hiddenRules: {
@@ -48,6 +49,7 @@ test('backup validation rejects exact version, invalid key values, and unknown k
   assert.throws(() => validateBackupPayload({ version: 1, data: { videoAutoHideDelay: Infinity } }), /Invalid setting: videoAutoHideDelay/);
   assert.throws(() => validateBackupPayload({ version: 1, data: { videoAutoHideDelay: 11 } }), /Invalid setting: videoAutoHideDelay/);
   assert.throws(() => validateBackupPayload({ version: 1, data: { videoAutoHideDelay: 1.5 } }), /Invalid setting: videoAutoHideDelay/);
+  assert.throws(() => validateBackupPayload({ version: 1, data: { videoPlayerMode: 'advanced' } }), /Invalid setting: videoPlayerMode/);
   assert.throws(() => validateBackupPayload({ version: 1, data: { videoControlsEnabledSites: ['ok.test', 4] } }), /Invalid setting: videoControlsEnabledSites/);
   assert.throws(() => validateBackupPayload({ version: 1, data: { videoControlsEnabledSites: [''] } }), /Invalid setting: videoControlsEnabledSites/);
   assert.throws(() => validateBackupPayload({ version: 1, data: { blockedSelectors: [] } }), /Invalid setting: blockedSelectors/);

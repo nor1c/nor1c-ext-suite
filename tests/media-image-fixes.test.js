@@ -154,6 +154,7 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
                 callback({
                   videoControls: true,
                   videoControlsEnabledSites: ['example.test'],
+                  videoPlayerMode: 'custom',
                   videoAutoHide: true,
                   videoAutoHideDelay: 30
                 });
@@ -274,6 +275,72 @@ test('video controls attach and detach dynamic auto-hide listeners and cancel de
   });
 });
 
+test('video controls switch live between native HTML and custom players', async () => {
+  await withPage(async (page) => {
+    await page.evaluateOnNewDocument(() => {
+      window.__storageListeners = [];
+      window.nor1cGetDomain = () => 'example.test';
+      window.IntersectionObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      };
+      window.chrome = {
+        runtime: { onMessage: { addListener() {} } },
+        storage: {
+          sync: {
+            get(_keys, callback) {
+              callback({
+                videoControls: true,
+                videoControlsEnabledSites: ['example.test'],
+                videoPlayerMode: 'basic'
+              });
+            }
+          },
+          onChanged: { addListener(listener) { window.__storageListeners.push(listener); } }
+        }
+      };
+    });
+    await page.goto('about:blank');
+    await page.setContent('<video id="video"></video>');
+    await page.addScriptTag({ path: path.join(root, 'src', 'content', 'video-controls.js') });
+
+    const result = await page.evaluate(async () => {
+      const video = document.getElementById('video');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const basic = {
+        nativeControls: video.controls && video.hasAttribute('controls'),
+        customControls: Boolean(document.querySelector('.nor1c-player-controls'))
+      };
+      video.removeAttribute('controls');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const siteCanManageControls = !video.hasAttribute('controls');
+
+      window.__storageListeners.forEach(listener => listener({ videoPlayerMode: { newValue: 'custom' } }, 'sync'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const custom = {
+        nativeControls: video.controls || video.hasAttribute('controls'),
+        customControls: Boolean(document.querySelector('.nor1c-player-controls'))
+      };
+
+      window.__storageListeners.forEach(listener => listener({ videoPlayerMode: { newValue: 'basic' } }, 'sync'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const basicAgain = {
+        nativeControls: video.controls && video.hasAttribute('controls'),
+        customControls: Boolean(document.querySelector('.nor1c-player-controls'))
+      };
+      return { basic, siteCanManageControls, custom, basicAgain };
+    });
+
+    assert.deepEqual(result, {
+      basic: { nativeControls: true, customControls: false },
+      siteCanManageControls: true,
+      custom: { nativeControls: false, customControls: true },
+      basicAgain: { nativeControls: true, customControls: false }
+    });
+  });
+});
+
 test('video controls hide fixed overlays for offscreen and CSS-hidden videos', async () => {
   await withPage(async (page) => {
     await page.evaluateOnNewDocument(() => {
@@ -283,7 +350,7 @@ test('video controls hide fixed overlays for offscreen and CSS-hidden videos', a
         storage: {
           sync: {
             get(_keys, callback) {
-              callback({ videoControls: true, videoControlsEnabledSites: ['example.test'] });
+              callback({ videoControls: true, videoControlsEnabledSites: ['example.test'], videoPlayerMode: 'custom' });
             }
           },
           onChanged: { addListener() {} }

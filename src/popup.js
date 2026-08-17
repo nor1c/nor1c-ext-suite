@@ -19,6 +19,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
 const BACKUP_KEYS = [
   ...BOOLEAN_SETTING_KEYS,
   'videoAutoHideDelay',
+  'videoPlayerMode',
   'videoControlsEnabledSites',
   'hiddenRules',
   'blockedSelectors',
@@ -73,6 +74,7 @@ function validateHiddenRules(value) {
 function validateSetting(key, value) {
   if (BOOLEAN_SETTING_KEYS.has(key)) return typeof value === 'boolean';
   if (key === 'videoAutoHideDelay') return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 1 && value <= 10;
+  if (key === 'videoPlayerMode') return value === 'basic' || value === 'custom';
   if (key === 'videoControlsEnabledSites') return Array.isArray(value) && value.every(domain => typeof domain === 'string' && domain.trim().length > 0);
   if (key === 'blockedSelectors') return typeof value === 'string';
   if (key === 'hiddenRules') return validateHiddenRules(value);
@@ -134,6 +136,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById(`${toKebab(key)}-toggle`).addEventListener('change', async e => {
       await chrome.storage.sync.set({ [key]: e.target.checked });
       if (key === 'videoControls') {
+        updatePlayerModeVisibility(e.target.checked);
         updateSiteExcludeVisibility(e.target.checked);
         updateAutoHideVisibility(e.target.checked);
       }
@@ -401,14 +404,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     hiddenSection.style.display = on ? '' : 'none';
   }
 
+  const playerModeCard = document.getElementById('player-mode-card');
+  const playerModeInputs = Array.from(document.querySelectorAll('input[name="video-player-mode"]'));
   const autoHideCard = document.getElementById('auto-hide-card');
   const autoHideToggle = document.getElementById('auto-hide-toggle');
   const autoHideDelayCard = document.getElementById('auto-hide-delay-card');
   const autoHideDelaySelect = document.getElementById('auto-hide-delay-select');
+  let videoPlayerMode = 'custom';
+
+  function updatePlayerModeVisibility(videoControlsOn) {
+    playerModeCard.style.display = videoControlsOn ? '' : 'none';
+  }
 
   function updateAutoHideVisibility(videoControlsOn) {
-    autoHideCard.style.display = videoControlsOn ? '' : 'none';
-    if (videoControlsOn) {
+    const showAutoHide = videoControlsOn && videoPlayerMode === 'custom';
+    autoHideCard.style.display = showAutoHide ? '' : 'none';
+    if (showAutoHide) {
       updateAutoHideDelayVisibility(autoHideToggle.checked);
     } else {
       autoHideDelayCard.style.display = 'none';
@@ -418,6 +429,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   function updateAutoHideDelayVisibility(autoHideOn) {
     autoHideDelayCard.style.display = autoHideOn ? '' : 'none';
   }
+
+  playerModeInputs.forEach(input => input.addEventListener('change', async e => {
+    if (!e.target.checked) return;
+    videoPlayerMode = e.target.value;
+    await chrome.storage.sync.set({ videoPlayerMode });
+    updateAutoHideVisibility(document.getElementById('video-controls-toggle').checked);
+  }));
 
   autoHideToggle.addEventListener('change', async e => {
     await chrome.storage.sync.set({ videoAutoHide: e.target.checked });
@@ -463,10 +481,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await loadSiteExclude();
 
-  const autoHideResult = await chrome.storage.sync.get(['videoAutoHide', 'videoAutoHideDelay']);
+  const autoHideResult = await chrome.storage.sync.get(['videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode']);
+  videoPlayerMode = autoHideResult.videoPlayerMode === 'basic' ? 'basic' : 'custom';
+  playerModeInputs.forEach(input => { input.checked = input.value === videoPlayerMode; });
   autoHideToggle.checked = autoHideResult.videoAutoHide === true;
   autoHideDelaySelect.value = String(typeof autoHideResult.videoAutoHideDelay === 'number' ? autoHideResult.videoAutoHideDelay : 3);
-  updateAutoHideVisibility(document.getElementById('video-controls-toggle').checked);
+  const videoControlsOn = document.getElementById('video-controls-toggle').checked;
+  updatePlayerModeVisibility(videoControlsOn);
+  updateAutoHideVisibility(videoControlsOn);
 
   const videoDownloadOn = document.getElementById('video-download-toggle').checked;
   updateVideoDownloaderFrame(videoDownloadOn);

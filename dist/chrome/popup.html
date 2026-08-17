@@ -24,6 +24,19 @@
       <span class="toggle-label">Video Controls</span>
       <label class="switch"><input type="checkbox" id="video-controls-toggle"><span class="slider"></span></label>
     </div>
+    <fieldset class="toggle-card sub-toggle player-mode-card" id="player-mode-card" style="display: none;">
+      <legend class="toggle-label">Video player</legend>
+      <div class="player-mode-switch" role="radiogroup" aria-label="Video player type">
+        <label class="player-mode-option">
+          <input type="radio" name="video-player-mode" value="basic">
+          <span>Basic HTML</span>
+        </label>
+        <label class="player-mode-option">
+          <input type="radio" name="video-player-mode" value="custom">
+          <span>Custom</span>
+        </label>
+      </div>
+    </fieldset>
     <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
       <span class="toggle-label" id="site-exclude-label">Enable for this site</span>
       <span class="toggle-desc" id="site-exclude-desc"></span>

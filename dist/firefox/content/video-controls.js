@@ -1,8 +1,9 @@
 (function () {
   let active = false;
+  let playerMode = 'custom';
   let observer = null;
   let walkTimeout = null;
-  const timestamps = new WeakMap();
+  let timestamps = new WeakMap();
   let overlaysDone = new WeakSet();
   let volumeState = new WeakMap();
   const syncing = new WeakSet();
@@ -12,6 +13,7 @@
   const volumeListeners = new WeakMap();
   const customControls = new Map();
   const controlListeners = new WeakMap();
+  const videoVisibility = new WeakMap();
   let positionFrame = null;
   let activeVideo = null;
 
@@ -27,6 +29,7 @@
     video[nor1c] { pointer-events: auto !important; object-fit: contain !important; }
     video[nor1c]::-webkit-media-controls { display: none !important; }
     .nor1c-player-controls { align-items: center; background: rgba(2, 6, 23, .88); box-sizing: border-box; backdrop-filter: blur(6px); color: #fff; display: flex; font: 500 11px/1 system-ui, sans-serif; gap: 5px; min-height: 34px; opacity: 1; padding: 3px 6px; pointer-events: auto; position: fixed; transition: opacity .15s ease; z-index: 2147483647; }
+    .nor1c-player-controls[hidden] { display: none !important; }
     .nor1c-player-controls--hidden { opacity: 0; pointer-events: none; }
     .nor1c-fullscreen-host:fullscreen { align-items: center !important; background: #000 !important; display: flex !important; height: 100% !important; justify-content: center !important; width: 100% !important; }
     .nor1c-fullscreen-host:fullscreen > video[nor1c] { height: 100% !important; inset: 0 !important; max-height: 100% !important; max-width: 100% !important; position: absolute !important; width: 100% !important; }
@@ -161,11 +164,6 @@
   function forceControls(video) {
     if (!video || video.tagName !== 'VIDEO') return;
 
-    const now = Date.now();
-    const last = timestamps.get(video) || 0;
-    if (now - last < 250) return;
-    timestamps.set(video, now);
-
     if (!originalVideoState.has(video)) {
       originalVideoState.set(video, {
         controls: video.hasAttribute('controls'),
@@ -175,6 +173,19 @@
         playbackRate: video.playbackRate
       });
     }
+    if (playerMode === 'basic') {
+      video.controls = true;
+      if (!video.hasAttribute('controls')) video.setAttribute('controls', '');
+      video.removeAttribute('nor1c');
+      removeCustomControls(video);
+      return;
+    }
+
+    const now = Date.now();
+    const last = timestamps.get(video) || 0;
+    if (now - last < 250) return;
+    timestamps.set(video, now);
+
     video.controls = false;
     video.removeAttribute('controls');
     video.setAttribute('controlsList', 'nodownload noplaybackrate');
@@ -220,17 +231,67 @@
     return hours ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
   }
 
-  function updateControlPosition(video) {
+  function isVideoRendered(video) {
+    if (!video.isConnected || document.hidden || video.getClientRects().length === 0) return false;
+    let element = video;
+    while (element && element.nodeType === 1) {
+      if (element.hidden) return false;
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return false;
+      element = element.parentElement;
+    }
+    return true;
+  }
+
+  function isVideoPaintedInViewport(video, controls, rect) {
+    const left = Math.max(0, rect.left);
+    const right = Math.min(window.innerWidth, rect.right);
+    const top = Math.max(0, rect.top);
+    const bottom = Math.min(window.innerHeight, rect.bottom);
+    if (right <= left || bottom <= top) return false;
+    const points = [
+      [(left + right) / 2, (top + bottom) / 2],
+      [left + (right - left) * 0.25, top + (bottom - top) * 0.25],
+      [left + (right - left) * 0.75, top + (bottom - top) * 0.75]
+    ];
+    const previousPointerEvents = controls.root.style.pointerEvents;
+    controls.root.style.pointerEvents = 'none';
+    const painted = points.some(function (point) {
+      const element = document.elementFromPoint(point[0], point[1]);
+      return element === video || (element && video.contains(element));
+    });
+    controls.root.style.pointerEvents = previousPointerEvents;
+    return painted;
+  }
+
+  function setControlsVisible(controls, visible) {
+    controls.root.hidden = !visible;
+    controls.root.style.setProperty('display', visible ? 'flex' : 'none', 'important');
+  }
+
+  function updateControlPosition(video, intersectionEntry) {
     const controls = customControls.get(video);
     if (!controls) return;
+    if (controls.fullscreenHost && document.fullscreenElement === controls.fullscreenHost) {
+      setControlsVisible(controls, true);
+      return;
+    }
+    if (intersectionEntry) {
+      videoVisibility.set(video, intersectionEntry.isIntersecting && intersectionEntry.intersectionRatio > 0);
+    }
     const rect = video.getBoundingClientRect();
     const left = Math.max(0, rect.left);
-    const visible = rect.width >= 220 && rect.height >= 100 && rect.bottom > 0 && rect.top < window.innerHeight && left < window.innerWidth;
-    controls.root.hidden = !visible;
+    const right = Math.min(rect.right, window.innerWidth);
+    const visibleWidth = Math.max(0, right - left);
+    const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+    const minimumVisibleHeight = Math.max(controls.root.offsetHeight, Math.min(100, rect.height * 0.25));
+    const geometricallyVisible = rect.width >= 220 && rect.height >= 100 && visibleWidth >= 220 && visibleHeight >= minimumVisibleHeight;
+    const visible = isVideoRendered(video) && geometricallyVisible && videoVisibility.get(video) !== false && isVideoPaintedInViewport(video, controls, rect);
+    setControlsVisible(controls, visible);
     if (!visible) return;
     controls.root.style.left = `${left}px`;
-    controls.root.style.width = `${Math.min(rect.width, window.innerWidth - left)}px`;
-    controls.root.style.top = `${Math.max(0, rect.bottom - controls.root.offsetHeight)}px`;
+    controls.root.style.width = `${visibleWidth}px`;
+    controls.root.style.top = `${Math.min(rect.bottom, window.innerHeight) - controls.root.offsetHeight}px`;
   }
 
   function scheduleControlPositions() {
@@ -246,7 +307,7 @@
     controls.fullscreenHost.classList.remove('nor1c-fullscreen-host');
     controls.fullscreenHost = null;
     document.documentElement.appendChild(controls.root);
-    controls.root.hidden = false;
+    setControlsVisible(controls, true);
     controls.root.classList.remove('nor1c-player-controls--hidden');
     scheduleControlPositions();
     setTimeout(scheduleControlPositions, 100);
@@ -262,7 +323,7 @@
     controls.fullscreenHost = host;
     host.classList.add('nor1c-fullscreen-host');
     host.appendChild(controls.root);
-    controls.root.hidden = false;
+    setControlsVisible(controls, true);
     controls.root.classList.remove('nor1c-player-controls--hidden');
     host.requestFullscreen().catch(function () { restoreFullscreenControls(video, controls); });
   }
@@ -272,7 +333,7 @@
       if (controls.fullscreenHost && document.fullscreenElement !== controls.fullscreenHost) {
         restoreFullscreenControls(video, controls);
       } else if (controls.fullscreenHost) {
-        controls.root.hidden = false;
+        setControlsVisible(controls, true);
         controls.root.classList.remove('nor1c-player-controls--hidden');
       }
     });
@@ -428,6 +489,7 @@
     controls.root.remove();
     customControls.delete(video);
     controlListeners.delete(video);
+    videoVisibility.delete(video);
     if (activeVideo === video) activeVideo = null;
   }
 
@@ -546,8 +608,10 @@
             }
           }
         }
-        if (m.type === 'attributes' && m.target.tagName === 'VIDEO') {
-          forceControls(m.target);
+        if (m.type === 'attributes') {
+          if (m.target.tagName === 'VIDEO' && m.attributeName === 'src') forceControls(m.target);
+          if ((m.attributeName === 'class' || m.attributeName === 'style' || m.attributeName === 'hidden') &&
+              !(m.target.classList && m.target.classList.contains('nor1c-player-controls'))) scheduleControlPositions();
         }
       }
     });
@@ -555,7 +619,7 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['src', 'currentSrc']
+      attributeFilter: ['src', 'class', 'style', 'hidden']
     });
   }
 
@@ -592,6 +656,11 @@
   let overlayInterval = null;
 
   function enforceVideo(v) {
+    if (playerMode === 'basic') {
+      v.controls = true;
+      if (!v.hasAttribute('controls')) v.setAttribute('controls', '');
+      return;
+    }
     v.controls = false;
     v.removeAttribute('controls');
     const saved = volumeState.get(v);
@@ -611,9 +680,8 @@
     videoObserver = new IntersectionObserver((entries) => {
       if (!active) return;
       for (const entry of entries) {
-        if (entry.isIntersecting) {
-          enforceVideo(entry.target);
-        }
+        updateControlPosition(entry.target, entry);
+        if (entry.isIntersecting && entry.intersectionRatio > 0) enforceVideo(entry.target);
       }
     }, { threshold: 0.1 });
     document.querySelectorAll('video[nor1c]').forEach(function (v) {
@@ -754,12 +822,16 @@
     processAll();
     walkTimeout = setTimeout(walkShadowRoots, 2000);
     startObserver();
-    startVideoObserver(); startOverlayPoll();
+    if (playerMode === 'custom') { startVideoObserver(); startOverlayPoll(); }
     window.addEventListener('scroll', scheduleControlPositions, true);
     window.addEventListener('resize', scheduleControlPositions);
+    document.addEventListener('transitionrun', scheduleControlPositions, true);
+    document.addEventListener('transitionend', scheduleControlPositions, true);
+    document.addEventListener('animationstart', scheduleControlPositions, true);
+    document.addEventListener('animationend', scheduleControlPositions, true);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('keydown', handleVideoHotkey);
-    startAutoHide();
+    if (playerMode === 'custom') document.addEventListener('keydown', handleVideoHotkey);
+    if (playerMode === 'custom') startAutoHide();
   }
 
   function restoreElement(element, style) {
@@ -775,6 +847,10 @@
     stopVideoObserver(); stopOverlayPoll();
     window.removeEventListener('scroll', scheduleControlPositions, true);
     window.removeEventListener('resize', scheduleControlPositions);
+    document.removeEventListener('transitionrun', scheduleControlPositions, true);
+    document.removeEventListener('transitionend', scheduleControlPositions, true);
+    document.removeEventListener('animationstart', scheduleControlPositions, true);
+    document.removeEventListener('animationend', scheduleControlPositions, true);
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
     document.removeEventListener('keydown', handleVideoHotkey);
     if (positionFrame) { cancelAnimationFrame(positionFrame); positionFrame = null; }
@@ -805,6 +881,7 @@
     originalElementStyles.clear();
     mutedObservers.clear();
     volumeState = new WeakMap();
+    timestamps = new WeakMap();
     overlaysDone = new WeakSet();
     styleEl.remove();
   }
@@ -812,10 +889,11 @@
   function init() {
     const domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay'], function (result) {
+    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode'], function (result) {
       const enabled = result.videoControls !== undefined ? result.videoControls : false;
       const enabledSites = result.videoControlsEnabledSites || [];
 
+      playerMode = result.videoPlayerMode === 'basic' ? 'basic' : 'custom';
       autoHideEnabled = result.videoAutoHide === true;
       autoHideDelay = typeof result.videoAutoHideDelay === 'number' ? result.videoAutoHideDelay : 3;
 
@@ -834,9 +912,16 @@
         });
       }
 
+      if (changes.videoPlayerMode) {
+        const wasActive = active;
+        if (wasActive) stop();
+        playerMode = changes.videoPlayerMode.newValue === 'basic' ? 'basic' : 'custom';
+        if (wasActive) start();
+      }
+
       if (changes.videoAutoHide) {
         autoHideEnabled = changes.videoAutoHide.newValue === true;
-        if (autoHideEnabled && active) startAutoHide();
+        if (autoHideEnabled && active && playerMode === 'custom') startAutoHide();
         else if (!autoHideEnabled && autoHideActive) stopAutoHide();
       }
 

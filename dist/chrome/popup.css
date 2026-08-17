@@ -457,6 +457,63 @@ input:focus-visible + .slider {
   text-align: center;
 }
 
+.player-mode-card {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.player-mode-card > .toggle-label {
+  padding: 0;
+}
+
+.player-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin-left: 8px;
+  background: #e2e8f0;
+  border-radius: 7px;
+}
+
+.player-mode-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.player-mode-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-mode-option span {
+  display: block;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.3s ease-out, color 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+
+.player-mode-option:hover span {
+  color: #1e3a5f;
+}
+
+.player-mode-option input:checked + span {
+  color: #1d4ed8;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+}
+
+.player-mode-option input:focus-visible + span {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(15, 23, 42, 0.16);
+}
+
 .auto-hide-delay-select {
   font-family: inherit;
   font-size: 11px;
