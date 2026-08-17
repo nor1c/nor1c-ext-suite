@@ -48,6 +48,16 @@
   "content_scripts": [
     {
       "matches": [
+        "*://*.tiktok.com/*"
+      ],
+      "js": [
+        "content/tiktok-background-playback.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
         "*://*.youtube.com/*",
         "*://*.youtube-nocookie.com/embed/*"
       ],

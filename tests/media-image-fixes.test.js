@@ -357,6 +357,44 @@ test('video controls hide fixed overlays for offscreen and CSS-hidden videos', a
   });
 });
 
+test('TikTok background playback resumes only media interrupted while hiding the tab', async () => {
+  await withPage(async (page) => {
+    await page.goto('about:blank');
+    await page.setContent('<video id="playing"></video><video id="idle"></video>');
+    await page.addScriptTag({ path: path.join(root, 'src', 'content', 'tiktok-background-playback.js') });
+
+    const result = await page.evaluate(async () => {
+      const playing = document.getElementById('playing');
+      const idle = document.getElementById('idle');
+      let playingPaused = false;
+      let idlePaused = true;
+      let playingCalls = 0;
+      let idleCalls = 0;
+
+      Object.defineProperties(playing, {
+        paused: { configurable: true, get: () => playingPaused },
+        ended: { configurable: true, get: () => false }
+      });
+      Object.defineProperties(idle, {
+        paused: { configurable: true, get: () => idlePaused },
+        ended: { configurable: true, get: () => false }
+      });
+      playing.play = () => { playingCalls += 1; playingPaused = false; return Promise.resolve(); };
+      idle.play = () => { idleCalls += 1; idlePaused = false; return Promise.resolve(); };
+      playing.pause = () => { playingPaused = true; playing.dispatchEvent(new Event('pause')); };
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+
+      document.addEventListener('visibilitychange', () => playing.pause());
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      return { playingCalls, idleCalls, playingPaused };
+    });
+
+    assert.deepEqual(result, { playingCalls: 1, idleCalls: 0, playingPaused: false });
+  });
+});
+
 test('video playback tracker never pauses background or offscreen media', async () => {
   await withPage(async (page) => {
     await page.evaluateOnNewDocument(() => {
