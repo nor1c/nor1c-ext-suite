@@ -21,9 +21,18 @@ test('background batches setting broadcasts once per tab', () => {
 test('smooth scroll removes media tracking listeners when disabled', () => {
   const source = read('src/content/smooth-scroll.js');
   for (const event of ['playing', 'pause', 'ended', 'emptied']) {
-    assert.match(source, new RegExp(`removeEventListener\\('${event}', refreshPlayingState, true\\)`));
+    assert.match(source, new RegExp(`removeEventListener\\('${event}', updatePlayingState, true\\)`));
   }
+  assert.match(source, /playingVideos\.clear\(\);/);
   assert.match(source, /stopVideoTracking\(\);/);
+});
+
+test('smooth scroll avoids feed-wide media rescans and caps delayed animation frames', () => {
+  const source = read('src/content/smooth-scroll.js');
+  assert.doesNotMatch(source, /function refreshPlayingState/);
+  assert.doesNotMatch(source, /createTreeWalker/);
+  assert.match(source, /if \(frameGap > MAX_FRAME_GAP\)/);
+  assert.match(source, /const dt = Math\.min\(Math\.max\(frameGap \/ 16\.67, 0\), 3\)/);
 });
 
 test('smooth scroll ignores keyboard events already handled by the page or video controls', () => {

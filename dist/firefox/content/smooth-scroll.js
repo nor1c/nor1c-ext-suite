@@ -9,11 +9,13 @@
   let lastTime = 0;
   let scrollTarget = null;
   let currentDecay = 0.90;
-  const MIN_VEL = 0.3;
+  const MIN_VEL = 0.2;
+  const MAX_FRAME_GAP = 100;
   const CACHE_TTL = 30000;
   let scrollableCache = new WeakMap();
   let cacheResetTime = Date.now();
   let hasPlayingVideo = false;
+  const playingVideos = new Set();
   let softLanding = null;
   let prevMaxScroll = 0;
 
@@ -68,8 +70,20 @@
   }
 
   function tick(now) {
-    const dt = lastTime ? (now - lastTime) / 16.67 : 1;
+    const frameGap = lastTime ? now - lastTime : 16.67;
     lastTime = now;
+
+    // Keep normal dropped frames time-correct, but discard stale momentum after
+    // a real main-thread stall instead of jumping when the page recovers.
+    if (frameGap > MAX_FRAME_GAP) {
+      velocity = 0;
+      loopId = null;
+      lastTime = 0;
+      softLanding = null;
+      prevMaxScroll = 0;
+      return;
+    }
+    const dt = Math.min(Math.max(frameGap / 16.67, 0), 3);
 
     if (softLanding) {
       const elapsed = now - softLanding.startTime;
@@ -91,8 +105,8 @@
         prevMaxScroll = 0;
         return;
       }
-      if (Math.abs(velocity) < 2.5) {
-        softLanding = { startVel: velocity, startTime: now, duration: 160 };
+      if (Math.abs(velocity) < 3.5) {
+        softLanding = { startVel: velocity, startTime: now, duration: 220 };
       }
     }
 
@@ -148,8 +162,8 @@
 
     const absDelta = Math.abs(delta);
     const intensity = Math.min(absDelta / 150, 1);
-    const scale = (0.12 + 0.63 * intensity) * 0.6;
-    currentDecay = 0.93 - 0.15 * intensity;
+    const scale = (0.12 + 0.63 * intensity) * 0.55;
+    currentDecay = 0.95 - 0.10 * intensity;
 
     softLanding = null;
     velocity += delta * scale;
@@ -190,44 +204,43 @@
 
   let videoTrackingSetup = false;
 
-  function walkVideos(root) {
-    const videos = root.querySelectorAll('video');
-    for (let i = 0; i < videos.length; i++) {
-      const video = videos[i];
-      if (!video.paused && !video.ended && video.getBoundingClientRect().width > 200) {
-        hasPlayingVideo = true;
-        return;
-      }
-    }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.shadowRoot && !hasPlayingVideo) walkVideos(node.shadowRoot);
-    }
-  }
+  function updatePlayingState(e) {
+    const video = e.target;
+    if (!video || video.tagName !== 'VIDEO') return;
 
-  function refreshPlayingState() {
-    hasPlayingVideo = false;
-    walkVideos(document);
+    if (e.type === 'playing' && !video.paused && !video.ended) {
+      playingVideos.add(video);
+    } else {
+      playingVideos.delete(video);
+    }
+    hasPlayingVideo = playingVideos.size > 0;
   }
 
   function setupVideoTracking() {
     if (videoTrackingSetup) return;
     videoTrackingSetup = true;
-    document.addEventListener('playing', refreshPlayingState, true);
-    document.addEventListener('pause', refreshPlayingState, true);
-    document.addEventListener('ended', refreshPlayingState, true);
-    document.addEventListener('emptied', refreshPlayingState, true);
-    refreshPlayingState();
+    document.addEventListener('playing', updatePlayingState, true);
+    document.addEventListener('pause', updatePlayingState, true);
+    document.addEventListener('ended', updatePlayingState, true);
+    document.addEventListener('emptied', updatePlayingState, true);
+
+    // This runs once. Media events update only their target instead of scanning
+    // the whole page, which is prohibitively expensive on video-heavy feeds.
+    const videos = document.querySelectorAll('video');
+    for (let i = 0; i < videos.length; i++) {
+      if (!videos[i].paused && !videos[i].ended) playingVideos.add(videos[i]);
+    }
+    hasPlayingVideo = playingVideos.size > 0;
   }
 
   function stopVideoTracking() {
     if (!videoTrackingSetup) return;
     videoTrackingSetup = false;
-    document.removeEventListener('playing', refreshPlayingState, true);
-    document.removeEventListener('pause', refreshPlayingState, true);
-    document.removeEventListener('ended', refreshPlayingState, true);
-    document.removeEventListener('emptied', refreshPlayingState, true);
+    document.removeEventListener('playing', updatePlayingState, true);
+    document.removeEventListener('pause', updatePlayingState, true);
+    document.removeEventListener('ended', updatePlayingState, true);
+    document.removeEventListener('emptied', updatePlayingState, true);
+    playingVideos.clear();
     hasPlayingVideo = false;
   }
 
@@ -270,11 +283,7 @@
   chrome.storage.sync.get(['smoothScroll'], (result) => {
     const val = result.smoothScroll === true;
     active = val;
-    if (val) {
-      apply();
-      var idle = window.requestIdleCallback || function(fn) { return setTimeout(fn, 1); };
-      idle(function() { setupVideoTracking(); });
-    }
+    if (val) apply();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
