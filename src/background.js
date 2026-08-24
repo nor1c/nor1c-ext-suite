@@ -337,6 +337,8 @@ chrome.runtime.onInstalled.addListener(async () => {
     imageBlocker: false,
     gifBlocker: false,
     videoControls: false,
+    volumeControl: true,
+    volumeControlLevel: 100,
     videoDownload: true,
     smoothScroll: true,
     adLinkBypass: true,
@@ -354,12 +356,30 @@ chrome.runtime.onInstalled.addListener(async () => {
     websiteBlockerRules: [],
     websiteBlockerSchedule: { start: '09:00', end: '17:00' }
   };
-  const stored = await chrome.storage.sync.get(Object.keys(defaults));
+  const stored = await chrome.storage.sync.get([...Object.keys(defaults), 'volumeControlLevels']);
   const missing = {};
   for (const [key, value] of Object.entries(defaults)) {
     if (stored[key] === undefined) missing[key] = value;
   }
+
+  // Volume moved from per-domain levels to a single browser-wide level. Carry
+  // the most common old value over so upgrades keep a familiar loudness.
+  if (stored.volumeControlLevel === undefined && stored.volumeControlLevels && typeof stored.volumeControlLevels === 'object') {
+    const counts = new Map();
+    for (const value of Object.values(stored.volumeControlLevels)) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      const level = Math.min(500, Math.max(0, Math.round(value)));
+      counts.set(level, (counts.get(level) || 0) + 1);
+    }
+    let best = null;
+    for (const [level, count] of counts) {
+      if (!best || count > best.count) best = { level, count };
+    }
+    if (best) missing.volumeControlLevel = best.level;
+  }
+
   if (Object.keys(missing).length > 0) await chrome.storage.sync.set(missing);
+  if (stored.volumeControlLevels !== undefined) await chrome.storage.sync.remove('volumeControlLevels');
   ensureMenus();
 });
 
@@ -560,7 +580,7 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
       updateBadge(Number(tabId));
     }
   }
-  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoDownload', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'cookieConsent', 'disableAnimations'];
+  const toggleKeys = ['classBlocker', 'blockedSelectors', 'imageBlocker', 'gifBlocker', 'videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'volumeControl', 'volumeControlLevel', 'videoDownload', 'smoothScroll', 'adLinkBypass', 'hiddenRules', 'elementHider', 'cookieConsent', 'disableAnimations'];
   const changedKeys = Object.keys(changes).filter(key => toggleKeys.includes(key));
   if (changedKeys.length === 0) return;
 

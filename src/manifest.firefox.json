@@ -78,6 +78,7 @@
         "content/image-blocker.js",
         "content/gif-blocker.js",
         "content/video-controls.js",
+        "content/volume-control.js",
         "content/ad-link-bypass.js",
         "content/element-hider.js",
         "content/save-to-png.js",
