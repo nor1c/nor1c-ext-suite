@@ -4,6 +4,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
   'gifBlocker',
   'videoControls',
   'videoAutoHide',
+  'volumeControl',
   'videoDownload',
   'adLinkBypass',
   'urlCleaner',
@@ -19,6 +20,7 @@ const BOOLEAN_SETTING_KEYS = new Set([
 const BACKUP_KEYS = [
   ...BOOLEAN_SETTING_KEYS,
   'videoAutoHideDelay',
+  'volumeControlLevel',
   'videoPlayerMode',
   'videoControlsEnabledSites',
   'hiddenRules',
@@ -74,6 +76,9 @@ function validateHiddenRules(value) {
 function validateSetting(key, value) {
   if (BOOLEAN_SETTING_KEYS.has(key)) return typeof value === 'boolean';
   if (key === 'videoAutoHideDelay') return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 1 && value <= 10;
+  if (key === 'volumeControlLevel') {
+    return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value <= 500;
+  }
   if (key === 'videoPlayerMode') return value === 'basic' || value === 'custom';
   if (key === 'videoControlsEnabledSites') return Array.isArray(value) && value.every(domain => typeof domain === 'string' && domain.trim().length > 0);
   if (key === 'blockedSelectors') return typeof value === 'string';
@@ -123,8 +128,8 @@ function validateBackupPayload(payload) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'cookieConsent', 'disableAnimations'];
-  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, videoDownload: true, adLinkBypass: true, urlCleaner: true, smoothScroll: true, quickTabSwitcher: true, elementHider: true, classBlocker: false, cookieConsent: true, disableAnimations: false };
+  const keys = ['imageBlocker', 'gifBlocker', 'videoControls', 'volumeControl', 'videoDownload', 'adLinkBypass', 'urlCleaner', 'smoothScroll', 'quickTabSwitcher', 'elementHider', 'classBlocker', 'cookieConsent', 'disableAnimations'];
+  const defaults = { imageBlocker: false, gifBlocker: false, videoControls: false, volumeControl: true, videoDownload: true, adLinkBypass: true, urlCleaner: true, smoothScroll: true, quickTabSwitcher: true, elementHider: true, classBlocker: false, cookieConsent: true, disableAnimations: false };
 
   const result = await chrome.storage.sync.get(keys);
   for (const key of keys) {
@@ -140,6 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSiteExcludeVisibility(e.target.checked);
         updateAutoHideVisibility(e.target.checked);
       }
+      if (key === 'volumeControl') updateVolumeControlVisibility(e.target.checked);
       if (key === 'videoDownload') updateVideoDownloaderFrame(e.target.checked);
       if (key === 'elementHider') updateElementHiderVisibility(e.target.checked);
     });
@@ -404,6 +410,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     hiddenSection.style.display = on ? '' : 'none';
   }
 
+  const VOLUME_DEFAULT_LEVEL = 100;
+  const volumeControlCard = document.getElementById('volume-control-card');
+  const volumeControlSlider = document.getElementById('volume-control-slider');
+  const volumeControlValue = document.getElementById('volume-control-value');
+  const volumeControlReset = document.getElementById('volume-control-reset');
+
+  function clampVolumeLevel(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return VOLUME_DEFAULT_LEVEL;
+    return Math.min(500, Math.max(0, Math.round(value)));
+  }
+
+  function renderVolumeLevel(level) {
+    volumeControlSlider.value = String(level);
+    volumeControlValue.textContent = `${level}%`;
+    volumeControlCard.classList.toggle('volume-control-card--boost', level > 100);
+  }
+
+  function updateVolumeControlVisibility(on) {
+    volumeControlCard.style.display = on ? '' : 'none';
+  }
+
+  async function persistVolumeLevel(level) {
+    await chrome.storage.sync.set({ volumeControlLevel: level });
+  }
+
+  volumeControlSlider.addEventListener('input', e => {
+    renderVolumeLevel(clampVolumeLevel(Number(e.target.value)));
+  });
+
+  volumeControlSlider.addEventListener('change', async e => {
+    await persistVolumeLevel(clampVolumeLevel(Number(e.target.value)));
+  });
+
+  volumeControlReset.addEventListener('click', async () => {
+    renderVolumeLevel(VOLUME_DEFAULT_LEVEL);
+    await persistVolumeLevel(VOLUME_DEFAULT_LEVEL);
+  });
+
   const playerModeCard = document.getElementById('player-mode-card');
   const playerModeInputs = Array.from(document.querySelectorAll('input[name="video-player-mode"]'));
   const autoHideCard = document.getElementById('auto-hide-card');
@@ -454,6 +498,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const hostname = new URL(tab.url).hostname;
       currentDomain = nor1cGetDomain(hostname);
       siteDesc.textContent = currentDomain;
+      const subtitle = document.getElementById('app-subtitle');
+      if (subtitle && currentDomain) subtitle.textContent = currentDomain;
     } catch (_) {
       siteCard.style.display = 'none';
       return;
@@ -481,6 +527,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await loadSiteExclude();
 
+  const volumeStored = await chrome.storage.sync.get(['volumeControlLevel']);
+  renderVolumeLevel(clampVolumeLevel(volumeStored.volumeControlLevel));
+
   const autoHideResult = await chrome.storage.sync.get(['videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode']);
   videoPlayerMode = autoHideResult.videoPlayerMode === 'basic' ? 'basic' : 'custom';
   playerModeInputs.forEach(input => { input.checked = input.value === videoPlayerMode; });
@@ -489,6 +538,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const videoControlsOn = document.getElementById('video-controls-toggle').checked;
   updatePlayerModeVisibility(videoControlsOn);
   updateAutoHideVisibility(videoControlsOn);
+  updateVolumeControlVisibility(document.getElementById('volume-control-toggle').checked);
 
   const videoDownloadOn = document.getElementById('video-download-toggle').checked;
   updateVideoDownloaderFrame(videoDownloadOn);

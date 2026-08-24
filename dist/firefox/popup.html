@@ -11,136 +11,253 @@
   <title>Nor1c Suite</title>
 </head>
 <body>
-  <div class="toggle-list">
-    <div class="toggle-card">
-      <span class="toggle-label">Image Blocker</span>
-      <label class="switch"><input type="checkbox" id="image-blocker-toggle"><span class="slider"></span></label>
+  <header class="app-header">
+    <div class="app-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5.5v6c0 4.6 3.2 8.9 8 10.5 4.8-1.6 8-5.9 8-10.5v-6z"/></svg>
     </div>
-    <div class="toggle-card">
-      <span class="toggle-label">GIF Blocker</span>
-      <label class="switch"><input type="checkbox" id="gif-blocker-toggle"><span class="slider"></span></label>
+    <div class="app-title">
+      <h1>Nor1c Suite</h1>
+      <p id="app-subtitle" class="app-subtitle">Browser toolkit</p>
     </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Video Controls</span>
-      <label class="switch"><input type="checkbox" id="video-controls-toggle"><span class="slider"></span></label>
-    </div>
-    <fieldset class="toggle-card sub-toggle player-mode-card" id="player-mode-card" style="display: none;">
-      <legend class="toggle-label">Video player</legend>
-      <div class="player-mode-switch" role="radiogroup" aria-label="Video player type">
-        <label class="player-mode-option">
-          <input type="radio" name="video-player-mode" value="basic">
-          <span>Basic HTML</span>
-        </label>
-        <label class="player-mode-option">
-          <input type="radio" name="video-player-mode" value="custom">
-          <span>Custom</span>
-        </label>
-      </div>
-    </fieldset>
-    <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
-      <span class="toggle-label" id="site-exclude-label">Enable for this site</span>
-      <span class="toggle-desc" id="site-exclude-desc"></span>
-      <label class="switch"><input type="checkbox" id="site-exclude-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card sub-toggle" id="auto-hide-card" style="display: none;">
-      <span class="toggle-label">Auto-hide controls</span>
-      <label class="switch"><input type="checkbox" id="auto-hide-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card sub-toggle" id="auto-hide-delay-card" style="display: none;">
-      <span class="toggle-label">Hide after</span>
-      <select id="auto-hide-delay-select" class="auto-hide-delay-select">
-        <option value="1">1 second</option>
-        <option value="2">2 seconds</option>
-        <option value="3">3 seconds</option>
-        <option value="5">5 seconds</option>
-        <option value="10">10 seconds</option>
-      </select>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Video Download</span>
-      <label class="switch"><input type="checkbox" id="video-download-toggle"><span class="slider"></span></label>
-    </div>
-    <div id="video-sources-section" class="video-sources-section" style="display:none;">
-      <div class="video-sources-header"><span>Video sedang diputar</span><button id="video-sources-refresh" type="button">Scan ulang</button></div>
-      <div id="video-sources-list" class="video-sources-list"></div>
-      <div id="video-sources-empty" class="video-sources-empty" style="display:none;">Tidak ada source video aktif.</div>
-    </div>
-    <div class="toggle-card toggle-card--action">
-      <span class="toggle-label">YouTube Panel</span>
-      <button id="yt-control-panel-btn" class="yt-panel-btn" title="Open settings panel">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">URL Cleaner</span>
-      <label class="switch"><input type="checkbox" id="url-cleaner-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Block Tab Ads</span>
-      <label class="switch"><input type="checkbox" id="ad-link-bypass-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Tab Switcher</span>
-      <label class="switch"><input type="checkbox" id="quick-tab-switcher-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Smooth Scroll</span>
-      <label class="switch"><input type="checkbox" id="smooth-scroll-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Cookie Consent</span>
-      <label class="switch"><input type="checkbox" id="cookie-consent-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Disable Animations</span>
-      <label class="switch"><input type="checkbox" id="disable-animations-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="toggle-card toggle-card--action" id="website-blocker-open-card">
-      <span class="toggle-label">Manage Blocked Sites</span>
-      <button id="website-blocker-panel-btn" class="yt-panel-btn" title="Open website blocker panel">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Element Hider</span>
-      <label class="switch"><input type="checkbox" id="element-hider-toggle"><span class="slider"></span></label>
-    </div>
-    <div class="picker-section" id="picker-section">
-      <button id="pick-element-btn" class="pick-element-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-        </svg>
-        Pick Element to Hide
-      </button>
-    </div>
-    <div id="hidden-elements-section" class="hidden-elements-section" style="display: none;">
-      <div class="hidden-elements-header">
-        <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
-        <button id="unhide-all-btn" class="hidden-elements-clear">Unhide All</button>
-      </div>
-      <div id="hidden-elements-list" class="hidden-elements-list"></div>
-      <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
-    </div>
-    <div class="toggle-card">
-      <span class="toggle-label">Class Blocker</span>
-      <label class="switch"><input type="checkbox" id="class-blocker-toggle"><span class="slider"></span></label>
-    </div>
-    <div id="class-blocker-section" class="blocker-input-section" style="display: none;">
-      <div class="blocker-input-wrap">
-        <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="2" spellcheck="false"></textarea>
-        <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
-      </div>
-    </div>
+  </header>
 
+  <div class="toggle-list">
+    <section class="group">
+      <div class="group-head">
+        <h2 class="group-title">Media</h2>
+      </div>
+      <div class="group-body">
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          </span>
+          <span class="toggle-label">Image Blocker</span>
+          <label class="switch"><input type="checkbox" id="image-blocker-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9.5A2.5 2.5 0 1 0 10 14.5"/><path d="M14.5 9.5v5"/><path d="M17.5 12h-3"/></svg>
+          </span>
+          <span class="toggle-label">GIF Blocker</span>
+          <label class="switch"><input type="checkbox" id="gif-blocker-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>
+          </span>
+          <span class="toggle-label">Video Controls</span>
+          <label class="switch"><input type="checkbox" id="video-controls-toggle"><span class="slider"></span></label>
+        </div>
+        <fieldset class="toggle-card sub-toggle player-mode-card" id="player-mode-card" style="display: none;">
+          <legend class="toggle-label">Video player</legend>
+          <div class="player-mode-switch" role="radiogroup" aria-label="Video player type">
+            <label class="player-mode-option">
+              <input type="radio" name="video-player-mode" value="basic">
+              <span>Basic HTML</span>
+            </label>
+            <label class="player-mode-option">
+              <input type="radio" name="video-player-mode" value="custom">
+              <span>Custom</span>
+            </label>
+          </div>
+        </fieldset>
+        <div class="toggle-card sub-toggle" id="site-exclude-card" style="display: none;">
+          <span class="toggle-text">
+            <span class="toggle-label" id="site-exclude-label">Enable for this site</span>
+            <span class="toggle-desc" id="site-exclude-desc"></span>
+          </span>
+          <label class="switch"><input type="checkbox" id="site-exclude-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card sub-toggle" id="auto-hide-card" style="display: none;">
+          <span class="toggle-label">Auto-hide controls</span>
+          <label class="switch"><input type="checkbox" id="auto-hide-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card sub-toggle" id="auto-hide-delay-card" style="display: none;">
+          <span class="toggle-label">Hide after</span>
+          <select id="auto-hide-delay-select" class="auto-hide-delay-select">
+            <option value="1">1 second</option>
+            <option value="2">2 seconds</option>
+            <option value="3">3 seconds</option>
+            <option value="5">5 seconds</option>
+            <option value="10">10 seconds</option>
+          </select>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a4 4 0 0 1 0 5"/><path d="M18.5 7a7.5 7.5 0 0 1 0 10"/></svg>
+          </span>
+          <span class="toggle-label">Volume Control</span>
+          <label class="switch"><input type="checkbox" id="volume-control-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card sub-toggle volume-control-card" id="volume-control-card" style="display: none;">
+          <div class="volume-control-head">
+            <span class="toggle-text">
+              <span class="toggle-label">Level</span>
+              <span class="toggle-desc">All sites</span>
+            </span>
+            <span class="volume-control-value" id="volume-control-value">100%</span>
+            <button type="button" id="volume-control-reset" class="volume-control-reset">Reset</button>
+          </div>
+          <input type="range" id="volume-control-slider" class="volume-control-slider" min="0" max="500" step="10" value="100" aria-label="Volume level for all sites">
+          <span class="volume-control-hint" id="volume-control-hint">Applies to every site. Above 100% boosts audio. Shift + &uarr; / &darr; to adjust.</span>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </span>
+          <span class="toggle-label">Video Download</span>
+          <label class="switch"><input type="checkbox" id="video-download-toggle"><span class="slider"></span></label>
+        </div>
+        <div id="video-sources-section" class="sub-panel video-sources-section" style="display:none;">
+          <div class="video-sources-header">
+            <span>Video sedang diputar</span>
+            <button id="video-sources-refresh" type="button" class="ghost-btn">Scan ulang</button>
+          </div>
+          <div id="video-sources-list" class="video-sources-list"></div>
+          <div id="video-sources-empty" class="video-sources-empty" style="display:none;">Tidak ada source video aktif.</div>
+        </div>
+        <div class="toggle-card toggle-card--action">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.6 7.2a2.8 2.8 0 0 0-2-2C17.9 4.7 12 4.7 12 4.7s-5.9 0-7.6.5a2.8 2.8 0 0 0-2 2C2 8.9 2 12 2 12s0 3.1.4 4.8a2.8 2.8 0 0 0 2 2c1.7.5 7.6.5 7.6.5s5.9 0 7.6-.5a2.8 2.8 0 0 0 2-2C22 15.1 22 12 22 12s0-3.1-.4-4.8z"/><path d="m10 15 5-3-5-3z"/></svg>
+          </span>
+          <span class="toggle-label">YouTube Panel</span>
+          <button id="yt-control-panel-btn" class="yt-panel-btn" title="Open settings panel" aria-label="Open YouTube settings panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <div class="group-head">
+        <h2 class="group-title">Browsing</h2>
+      </div>
+      <div class="group-body">
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+          </span>
+          <span class="toggle-label">URL Cleaner</span>
+          <label class="switch"><input type="checkbox" id="url-cleaner-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="m9.5 13.5 5 4"/><path d="m14.5 13.5-5 4"/></svg>
+          </span>
+          <span class="toggle-label">Block Tab Ads</span>
+          <label class="switch"><input type="checkbox" id="ad-link-bypass-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h9l2-3h5v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
+          </span>
+          <span class="toggle-label">Tab Switcher</span>
+          <label class="switch"><input type="checkbox" id="quick-tab-switcher-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v13"/><path d="m7.5 12.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
+          </span>
+          <span class="toggle-label">Smooth Scroll</span>
+          <label class="switch"><input type="checkbox" id="smooth-scroll-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-4-4 3 3 0 0 1-5-5z"/><circle cx="9" cy="11" r="1"/><circle cx="14" cy="15" r="1"/><circle cx="9.5" cy="16" r="1"/></svg>
+          </span>
+          <span class="toggle-label">Cookie Consent</span>
+          <label class="switch"><input type="checkbox" id="cookie-consent-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13H11l-1 9 8.5-11H12z"/></svg>
+          </span>
+          <span class="toggle-label">Disable Animations</span>
+          <label class="switch"><input type="checkbox" id="disable-animations-toggle"><span class="slider"></span></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <div class="group-head">
+        <h2 class="group-title">Blocking</h2>
+      </div>
+      <div class="group-body">
+        <div class="toggle-card toggle-card--action" id="website-blocker-open-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+          </span>
+          <span class="toggle-label">Manage Blocked Sites</span>
+          <button id="website-blocker-panel-btn" class="yt-panel-btn" title="Open website blocker panel" aria-label="Open website blocker panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.2A9.8 9.8 0 0 1 12 4c5 0 9 4.5 10 8a13 13 0 0 1-2.2 3.4"/><path d="M6.6 6.6C4.3 8.1 2.7 10.2 2 12c1 3.5 5 8 10 8 1.9 0 3.6-.7 5.1-1.6"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="m3 3 18 18"/></svg>
+          </span>
+          <span class="toggle-label">Element Hider</span>
+          <label class="switch"><input type="checkbox" id="element-hider-toggle"><span class="slider"></span></label>
+        </div>
+        <div class="sub-panel picker-section" id="picker-section">
+          <button id="pick-element-btn" class="pick-element-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            Pick Element to Hide
+          </button>
+        </div>
+        <div id="hidden-elements-section" class="sub-panel hidden-elements-section" style="display: none;">
+          <div class="hidden-elements-header">
+            <span class="hidden-elements-title">Hidden Elements <span id="hidden-count" class="hidden-count">0</span></span>
+            <button id="unhide-all-btn" class="hidden-elements-clear">Unhide All</button>
+          </div>
+          <div id="hidden-elements-list" class="hidden-elements-list"></div>
+          <div id="hidden-elements-empty" class="hidden-elements-empty" style="display: none;">No hidden elements on this site</div>
+        </div>
+        <div class="toggle-card">
+          <span class="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m8 4-3 16"/><path d="m16 4-3 16"/><path d="M4.5 9.5h15"/><path d="M3.5 14.5h15"/></svg>
+          </span>
+          <span class="toggle-label">Class Blocker</span>
+          <label class="switch"><input type="checkbox" id="class-blocker-toggle"><span class="slider"></span></label>
+        </div>
+        <div id="class-blocker-section" class="sub-panel blocker-input-section" style="display: none;">
+          <div class="blocker-input-wrap">
+            <textarea id="blocked-selectors-input" class="blocker-textarea" placeholder="iklan, ads, #id1, .banner-ads" rows="2" spellcheck="false"></textarea>
+            <div class="blocker-hint">Separate with commas. Names without . or # are treated as class names.</div>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <div class="bottom-bar">
     <div class="backup-actions">
-      <button id="export-btn" class="backup-btn" title="Export settings">Export</button>
-      <button id="import-btn" class="backup-btn" title="Import settings">Import</button>
+      <button id="export-btn" class="backup-btn" title="Export settings">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button id="import-btn" class="backup-btn" title="Import settings">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import
+      </button>
       <input type="file" id="import-file" accept=".json" style="display:none">
     </div>
-    <div class="footer-text">Always active: Copy Link Text, Image Viewer, Save to PNG, Location Blocker, Notification Blocker</div>
+    <details class="footer-always">
+      <summary class="footer-always-label">
+        Always active
+        <span class="footer-always-count">5</span>
+        <svg class="footer-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <div class="footer-tags">
+        <span class="footer-tag">Copy Link Text</span>
+        <span class="footer-tag">Image Viewer</span>
+        <span class="footer-tag">Save to PNG</span>
+        <span class="footer-tag">Location Blocker</span>
+        <span class="footer-tag">Notification Blocker</span>
+      </div>
+    </details>
   </div>
 
   <script src="lib/utils.js"></script>
