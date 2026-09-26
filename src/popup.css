@@ -825,6 +825,14 @@ input:focus-visible + .slider {
   gap: 8px;
 }
 
+.import-error:not(:empty) {
+  margin-top: 8px;
+  color: #dc2626;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .backup-btn {
   flex: 1;
   display: inline-flex;
