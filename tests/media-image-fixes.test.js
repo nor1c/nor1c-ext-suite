@@ -21,7 +21,7 @@ function browserExecutable() {
 async function withPage(run) {
   const executablePath = browserExecutable();
   assert.ok(executablePath, 'Chrome or Edge executable is required for browser tests');
-  const browser = await puppeteer.launch({ headless: true, executablePath });
+  const browser = await puppeteer.launch({ headless: true, executablePath, waitForInitialPage: false });
   try {
     const page = await browser.newPage();
     await run(page);
@@ -531,7 +531,8 @@ test('video lifecycle fixes retain no permanent tracker polling or uncancelled s
   assert.match(controls, /if \(!active\) return;/);
   assert.match(controls, /videoObserver\.unobserve\(video\)/);
   assert.match(controls, /volumeListeners = new WeakMap\(\)/);
-  assert.match(controls, /removeEventListener\('volumechange', listeners\.volumechange\)/);
+  assert.match(controls, /audioEvents\.forEach\(type => video\.removeEventListener\(type, update\)\)/);
+  assert.doesNotMatch(controls, /syncInstagramButton|Object\.defineProperty\(video, '(muted|volume)'/);
   assert.match(controls, /originalElementStyles\.delete\(element\)/);
   assert.match(controls, /autoHideVideos\.forEach\(detachAutoHideVideo\)/);
   assert.match(reset, /observers\.src\.disconnect\(\)/);

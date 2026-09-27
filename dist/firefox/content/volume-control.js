@@ -12,6 +12,7 @@
   let lastWrittenLevel = null;
 
   const graphs = new WeakMap();
+  const corsLoads = new WeakMap();
   const originalVolumes = new WeakMap();
   const tracked = new Set();
 
@@ -40,12 +41,14 @@
     return audioContext;
   }
 
-  // Routing an element through WebAudio is irreversible and silently mutes
-  // cross-origin media without CORS headers, so only do it to exceed 100%.
+  // WebAudio routing cannot be undone. Only CORS-enabled, loaded media is
+  // eligible: even a same-origin URL can redirect to a non-CORS CDN.
   function ensureGraph(media) {
     if (graphs.has(media)) return graphs.get(media);
+    if (media.readyState < 1 || !corsLoads.get(media) || !['anonymous', 'use-credentials'].includes(media.crossOrigin)) return null;
     const context = ensureAudioContext();
-    if (!context) return null;
+    // Do not steal the native audio path while autoplay policy suspends WebAudio.
+    if (!context || context.state !== 'running') return null;
     try {
       const source = context.createMediaElementSource(media);
       const gain = context.createGain();
@@ -122,7 +125,21 @@
 
   function handleMediaEvent(event) {
     const media = event.target;
-    if (media instanceof HTMLMediaElement) applyToMedia(media);
+    if (!(media instanceof HTMLMediaElement)) return;
+    if (event.type === 'loadstart') {
+      // Setting crossorigin after a non-CORS resource loaded does not make it safe.
+      corsLoads.set(media, ['anonymous', 'use-credentials'].includes(media.crossOrigin));
+    }
+    applyToMedia(media);
+  }
+
+  function handleAudioGesture(event) {
+    if (!event.isTrusted || !active || level <= 100) return;
+    const context = ensureAudioContext();
+    if (context && context.state === 'suspended') context.resume().then(function () {
+      if (active) applyToAll();
+    }).catch(function () {});
+    else applyToAll();
   }
 
   function isEditableTarget(target) {
@@ -163,9 +180,12 @@
     if (active) return;
     active = true;
     startObserver();
+    document.addEventListener('loadstart', handleMediaEvent, true);
     document.addEventListener('play', handleMediaEvent, true);
     document.addEventListener('loadedmetadata', handleMediaEvent, true);
     document.addEventListener('keydown', handleHotkey);
+    document.addEventListener('pointerdown', handleAudioGesture, true);
+    document.addEventListener('keydown', handleAudioGesture, true);
     applyToAll();
   }
 
@@ -173,9 +193,12 @@
     if (!active) return;
     active = false;
     stopObserver();
+    document.removeEventListener('loadstart', handleMediaEvent, true);
     document.removeEventListener('play', handleMediaEvent, true);
     document.removeEventListener('loadedmetadata', handleMediaEvent, true);
     document.removeEventListener('keydown', handleHotkey);
+    document.removeEventListener('pointerdown', handleAudioGesture, true);
+    document.removeEventListener('keydown', handleAudioGesture, true);
     if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
     restoreAll();
   }

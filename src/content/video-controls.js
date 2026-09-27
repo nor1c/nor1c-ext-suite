@@ -6,10 +6,12 @@
   let timestamps = new WeakMap();
   let overlaysDone = new WeakSet();
   let volumeState = new WeakMap();
-  const syncing = new WeakSet();
+  const audioPreferences = new WeakMap();
+  let globalVolumeEnabled = true;
+  let globalVolumeLevel = 100;
+  const audioEvents = ['volumechange', 'play', 'playing', 'seeking', 'loadstart', 'loadedmetadata'];
   const originalVideoState = new Map();
   const originalElementStyles = new Map();
-  const mutedObservers = new Map();
   const volumeListeners = new WeakMap();
   const customControls = new Map();
   const controlListeners = new WeakMap();
@@ -92,23 +94,6 @@
     return null;
   }
 
-  function syncInstagramButton(video) {
-    if (syncing.has(video)) return;
-    syncing.add(video);
-    const btn = findInstagramMuteButton(video);
-    if (!btn) { syncing.delete(video); return; }
-    const svg = btn.querySelector('svg[aria-label]');
-    if (!svg) { syncing.delete(video); return; }
-    const label = svg.getAttribute('aria-label');
-    const isPlaying = label === 'Audio is playing';
-    if (video.muted && isPlaying) {
-      btn.click();
-    } else if (!video.muted && !isPlaying) {
-      btn.click();
-    }
-    setTimeout(function () { syncing.delete(video); }, 100);
-  }
-
   function liftSoundButton(video) {
     const btn = findInstagramMuteButton(video);
     if (!btn) return;
@@ -173,6 +158,7 @@
         playbackRate: video.playbackRate
       });
     }
+    setupVolumeGuard(video);
     if (playerMode === 'basic') {
       video.controls = true;
       if (!video.hasAttribute('controls')) video.setAttribute('controls', '');
@@ -197,7 +183,6 @@
 
     liftStackingContexts(video);
     disableOverlays(video);
-    setupVolumeGuard(video);
     setupCustomControls(video);
     liftSoundButton(video);
     if (videoObserver) videoObserver.observe(video);
@@ -372,7 +357,7 @@
       if (video.paused) video.play().catch(function () {});
       else video.pause();
     } else if (key === 'm') {
-      video.muted = !video.muted;
+      toggleVideoAudio(video);
       controlListeners.get(video).updateVolume();
     } else {
       toggleFullscreen(video, customControls.get(video));
@@ -428,7 +413,7 @@
       time.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
     };
     const updateVolume = function () {
-      const muted = video.muted || video.volume === 0;
+      const muted = video.muted || video.volume === 0 || (globalVolumeEnabled && globalVolumeLevel === 0);
       setControlIcon(mute, muted ? 'M3 9v6h4l5 4V5L7 9H3zm12.5 1.5 2 2 2-2 1.5 1.5-2 2 2 2-1.5 1.5-2-2-2 2-1.5-1.5 2-2-2-2z' : 'M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12z');
       mute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
       mute.title = muted ? 'Unmute' : 'Mute';
@@ -436,7 +421,7 @@
     const listeners = {
       playClick: function () { if (video.paused) video.play().catch(function () {}); else video.pause(); },
       seekInput: function () { if (Number.isFinite(video.duration)) video.currentTime = Number(progress.value) / 1000 * video.duration; },
-      muteClick: function () { video.muted = !video.muted; updateVolume(); },
+      muteClick: function () { toggleVideoAudio(video); updateVolume(); },
       speedChange: function () { video.playbackRate = Number(speed.value); },
       fullscreenClick: function () { toggleFullscreen(video, controls); },
       activateVideo,
@@ -493,73 +478,79 @@
     if (activeVideo === video) activeVideo = null;
   }
 
+  function applyVideoAudio(video) {
+    const state = volumeState.get(video);
+    if (!active || !state || state.interactionTimer !== null) return;
+    const preference = audioPreferences.get(video);
+    const muted = preference ? preference.muted : false;
+    if (video.muted !== muted) video.muted = muted;
+    // A saved global 0% or an explicit volume-slider choice is intentional silence.
+    if (video.volume === 0 && !(preference && preference.silent) &&
+        !(globalVolumeEnabled && globalVolumeLevel === 0)) {
+      video.volume = globalVolumeEnabled ? Math.min(1, globalVolumeLevel / 100) : state.lastVolume;
+    }
+    if (video.volume > 0) state.lastVolume = video.volume;
+  }
+
+  function toggleVideoAudio(video) {
+    const silent = video.muted || video.volume === 0 || (globalVolumeEnabled && globalVolumeLevel === 0);
+    audioPreferences.set(video, { muted: !silent, silent: false });
+    if (silent && globalVolumeEnabled && globalVolumeLevel === 0) {
+      globalVolumeLevel = 100;
+      chrome.storage.sync.set({ volumeControlLevel: 100 });
+    }
+    applyVideoAudio(video);
+  }
+
+  function rememberAudioInteraction(event) {
+    if (!event.isTrusted) return;
+    if (event.type === 'keydown' && ![' ', 'Enter', 'm', 'M', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    const target = event.composedPath()[0];
+    if (!(target instanceof Element) || target.closest('.nor1c-player-controls')) return;
+    if (event.type === 'keydown' && playerMode === 'custom' && event.key.toLowerCase() === 'm') return;
+    const control = target.closest('button, [role="button"], input, [role="slider"]');
+    const label = control && [control.getAttribute('aria-label'), control.getAttribute('title'),
+      control.textContent, control.querySelector('svg[aria-label]')?.getAttribute('aria-label')].filter(Boolean).join(' ');
+    // Native media controls are retargeted to the video. Only recognizable site
+    // audio controls count otherwise; a generic Play click must not authorize mute.
+    const nativeControls = target.tagName === 'VIDEO' && playerMode === 'basic' && target.controls;
+    if (!nativeControls && (!label || !/mute|audio|sound|volume/i.test(label))) return;
+    for (const video of originalVideoState.keys()) {
+      const container = video.closest('article, [role="dialog"], main, section') || video.parentElement;
+      if (target !== video && (!container || !container.contains(control))) continue;
+      const state = volumeState.get(video);
+      if (!state) continue;
+      if (state.interactionTimer !== null) clearTimeout(state.interactionTimer);
+      const before = { muted: video.muted, volume: video.volume };
+      state.interactionTimer = setTimeout(function () {
+        state.interactionTimer = null;
+        if (!active || !volumeState.has(video)) return;
+        if (video.muted !== before.muted || video.volume !== before.volume) {
+          audioPreferences.set(video, { muted: video.muted, silent: video.volume === 0 });
+        }
+        applyVideoAudio(video);
+      }, 0);
+    }
+  }
+
   function setupVolumeGuard(video) {
     if (volumeState.has(video)) return;
+    volumeState.set(video, { lastVolume: video.volume > 0 ? video.volume : 1, interactionTimer: null });
+    // Read actual media state across isolated worlds. Never replace native setters
+    // or click a site's toggle to synchronize labels: both can re-mute the player.
+    const update = function () { applyVideoAudio(video); };
+    volumeListeners.set(video, update);
+    audioEvents.forEach(type => video.addEventListener(type, update));
+    applyVideoAudio(video);
+  }
 
-    const nativeMutedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
-    const nativeVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
-    volumeState.set(video, { muted: video.muted, volume: video.volume });
-
-    let muted = video.muted;
-
-    Object.defineProperty(video, 'muted', {
-      get: function () { return nativeMutedDesc.get.call(video); },
-      set: function (val) {
-        const previous = nativeMutedDesc.get.call(video);
-        nativeMutedDesc.set.call(video, val);
-        muted = nativeMutedDesc.get.call(video);
-        volumeState.set(video, { muted, volume: video.volume });
-        if (previous !== muted && !syncing.has(video)) syncInstagramButton(video);
-      },
-      configurable: true
-    });
-
-    Object.defineProperty(video, 'volume', {
-      get: function () { return nativeVolumeDesc.get.call(video); },
-      set: function (val) {
-        nativeVolumeDesc.set.call(video, val);
-        volumeState.set(video, { muted, volume: val });
-      },
-      configurable: true
-    });
-
-    const listeners = {
-      volumechange() {
-        muted = nativeMutedDesc.get.call(video);
-        volumeState.set(video, { muted, volume: nativeVolumeDesc.get.call(video) });
-      },
-      seeking() {
-        const saved = volumeState.get(video);
-        if (saved) {
-          muted = saved.muted;
-          nativeMutedDesc.set.call(video, saved.muted);
-          nativeVolumeDesc.set.call(video, saved.volume);
-          syncInstagramButton(video);
-        }
-      },
-      playing() {
-        const saved = volumeState.get(video);
-        if (saved) {
-          muted = saved.muted;
-          nativeMutedDesc.set.call(video, saved.muted);
-          nativeVolumeDesc.set.call(video, saved.volume);
-        }
-      }
-    };
-    volumeListeners.set(video, listeners);
-    video.addEventListener('volumechange', listeners.volumechange);
-    video.addEventListener('seeking', listeners.seeking);
-    video.addEventListener('playing', listeners.playing);
-
-    const mutedObs = new MutationObserver(function () {
-      const saved = volumeState.get(video);
-      if (saved && nativeMutedDesc.get.call(video) !== saved.muted) {
-        nativeMutedDesc.set.call(video, saved.muted);
-        syncInstagramButton(video);
-      }
-    });
-    mutedObs.observe(video, { attributes: true, attributeFilter: ['muted'] });
-    mutedObservers.set(video, mutedObs);
+  function removeVolumeGuard(video) {
+    const update = volumeListeners.get(video);
+    if (update) audioEvents.forEach(type => video.removeEventListener(type, update));
+    volumeListeners.delete(video);
+    const state = volumeState.get(video);
+    if (state && state.interactionTimer !== null) clearTimeout(state.interactionTimer);
+    volumeState.delete(video);
   }
 
   function processAll() {
@@ -663,11 +654,6 @@
     }
     v.controls = false;
     v.removeAttribute('controls');
-    const saved = volumeState.get(v);
-    if (saved) {
-      if (v.muted !== saved.muted) v.muted = saved.muted;
-      if (v.volume !== saved.volume) v.volume = saved.volume;
-    }
     disableOverlays(v);
     if (!liftDone.has(v)) {
       liftSoundButton(v);
@@ -770,22 +756,10 @@
     if (videoObserver) videoObserver.unobserve(video);
     detachAutoHideVideo(video);
     removeCustomControls(video);
-    const mutedObserver = mutedObservers.get(video);
-    if (mutedObserver) mutedObserver.disconnect();
-    mutedObservers.delete(video);
-    const listeners = volumeListeners.get(video);
-    if (listeners) {
-      video.removeEventListener('volumechange', listeners.volumechange);
-      video.removeEventListener('seeking', listeners.seeking);
-      video.removeEventListener('playing', listeners.playing);
-      volumeListeners.delete(video);
-    }
-    volumeState.delete(video);
+    removeVolumeGuard(video);
     timestamps.delete(video);
     const state = originalVideoState.get(video);
     if (state) {
-      delete video.muted;
-      delete video.volume;
       if (state.controls) video.setAttribute('controls', '');
       else video.removeAttribute('controls');
       if (state.controlsList === null) video.removeAttribute('controlsList');
@@ -819,6 +793,9 @@
   function start() {
     if (active) return;
     active = true;
+    ensureStyle();
+    document.addEventListener('click', rememberAudioInteraction, true);
+    document.addEventListener('keydown', rememberAudioInteraction, true);
     processAll();
     walkTimeout = setTimeout(walkShadowRoots, 2000);
     startObserver();
@@ -842,6 +819,8 @@
   function stop() {
     if (!active) return;
     active = false;
+    document.removeEventListener('click', rememberAudioInteraction, true);
+    document.removeEventListener('keydown', rememberAudioInteraction, true);
     if (walkTimeout) { clearTimeout(walkTimeout); walkTimeout = null; }
     stopObserver();
     stopVideoObserver(); stopOverlayPoll();
@@ -857,17 +836,7 @@
     stopAutoHide();
     for (const [video, state] of originalVideoState) {
       removeCustomControls(video);
-      const mutedObserver = mutedObservers.get(video);
-      if (mutedObserver) mutedObserver.disconnect();
-      const listeners = volumeListeners.get(video);
-      if (listeners) {
-        video.removeEventListener('volumechange', listeners.volumechange);
-        video.removeEventListener('seeking', listeners.seeking);
-        video.removeEventListener('playing', listeners.playing);
-        volumeListeners.delete(video);
-      }
-      delete video.muted;
-      delete video.volume;
+      removeVolumeGuard(video);
       if (state.controls) video.setAttribute('controls', '');
       else video.removeAttribute('controls');
       if (state.controlsList === null) video.removeAttribute('controlsList');
@@ -879,7 +848,6 @@
     for (const [element, style] of originalElementStyles) restoreElement(element, style);
     originalVideoState.clear();
     originalElementStyles.clear();
-    mutedObservers.clear();
     volumeState = new WeakMap();
     timestamps = new WeakMap();
     overlaysDone = new WeakSet();
@@ -889,10 +857,13 @@
   function init() {
     const domain = getDomain();
 
-    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode'], function (result) {
+    chrome.storage.sync.get(['videoControls', 'videoControlsEnabledSites', 'videoAutoHide', 'videoAutoHideDelay', 'videoPlayerMode', 'volumeControl', 'volumeControlLevel'], function (result) {
       const enabled = result.videoControls !== undefined ? result.videoControls : false;
       const enabledSites = result.videoControlsEnabledSites || [];
 
+      globalVolumeEnabled = result.volumeControl !== false;
+      globalVolumeLevel = typeof result.volumeControlLevel === 'number' && Number.isFinite(result.volumeControlLevel)
+        ? Math.min(500, Math.max(0, result.volumeControlLevel)) : 100;
       playerMode = result.videoPlayerMode === 'basic' ? 'basic' : 'custom';
       autoHideEnabled = result.videoAutoHide === true;
       autoHideDelay = typeof result.videoAutoHideDelay === 'number' ? result.videoAutoHideDelay : 3;
@@ -902,6 +873,16 @@
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync') return;
+
+      if (changes.volumeControl) globalVolumeEnabled = changes.volumeControl.newValue !== false;
+      if (changes.volumeControlLevel) {
+        const level = changes.volumeControlLevel.newValue;
+        globalVolumeLevel = typeof level === 'number' && Number.isFinite(level) ? Math.min(500, Math.max(0, level)) : 100;
+      }
+      if (active && (changes.volumeControl || changes.volumeControlLevel)) {
+        originalVideoState.forEach(function (_, video) { applyVideoAudio(video); });
+        customControls.forEach(function (_, video) { controlListeners.get(video).updateVolume(); });
+      }
 
       if (changes.videoControls) {
         const enabled = changes.videoControls.newValue;

@@ -23,7 +23,7 @@ function browserExecutable() {
 async function withPage(run, options = {}) {
   const executablePath = browserExecutable();
   assert.ok(executablePath, 'Chrome or Edge executable is required for browser tests');
-  const browser = await puppeteer.launch({ headless: true, executablePath });
+  const browser = await puppeteer.launch({ headless: true, executablePath, waitForInitialPage: false });
   try {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument((stored) => {
@@ -108,8 +108,10 @@ test('volume control attenuates existing and future media', async () => {
 
 test('volume control boosts past 100% through a gain node instead of clipping element volume', async () => {
   await withPage(async (page) => {
-    await page.setContent('<video id="v"></video>');
+    await page.setContent('<video id="v" crossorigin="anonymous"></video>');
+    await page.evaluate(() => Object.defineProperty(document.getElementById('v'), 'readyState', { get: () => 1 }));
     await attachScript(page);
+    await page.evaluate(() => document.getElementById('v').dispatchEvent(new Event('loadstart')));
     const result = await page.evaluate(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       return {
@@ -119,6 +121,54 @@ test('volume control boosts past 100% through a gain node instead of clipping el
       };
     });
     assert.deepEqual(result, { elementVolume: 1, gainNodes: 1, gainValue: 2.5 });
+  }, { stored: { volumeControl: true, volumeControlLevel: 250 } });
+});
+
+test('boost leaves unknown and non-CORS media on native audio, including redirects', async () => {
+  await withPage(async page => {
+    await page.setContent('<video id="v"></video><video id="loading" crossorigin="anonymous"></video>');
+    await page.evaluate(() => Object.defineProperty(document.getElementById('v'), 'readyState', { get: () => 4 }));
+    await attachScript(page);
+    const result = await page.evaluate(() => ({
+      volumes: Array.from(document.querySelectorAll('video'), v => v.volume),
+      graphs: window.__gainNodes.length
+    }));
+    assert.deepEqual(result, { volumes: [1, 1], graphs: 0 });
+  }, { stored: { volumeControl: true, volumeControlLevel: 250 } });
+});
+
+test('adding crossorigin after loading does not qualify an existing resource for boost', async () => {
+  await withPage(async page => {
+    await page.setContent('<video id="v"></video>');
+    await attachScript(page);
+    await page.evaluate(() => {
+      const video = document.getElementById('v');
+      video.dispatchEvent(new Event('loadstart'));
+      Object.defineProperty(video, 'readyState', { get: () => 4 });
+      video.crossOrigin = 'anonymous';
+      video.dispatchEvent(new Event('loadedmetadata'));
+    });
+    assert.equal(await page.evaluate(() => window.__gainNodes.length), 0);
+  }, { stored: { volumeControl: true, volumeControlLevel: 250 } });
+});
+
+test('suspended WebAudio never takes over audible native playback', async () => {
+  await withPage(async page => {
+    await page.setContent('<video id="v" crossorigin="anonymous"></video>');
+    await page.evaluate(() => {
+      Object.defineProperty(document.getElementById('v'), 'readyState', { get: () => 4 });
+      window.__context = null;
+      const Base = window.AudioContext;
+      window.AudioContext = class extends Base {
+        constructor() { super(); this.state = 'suspended'; window.__context = this; }
+      };
+    });
+    await attachScript(page);
+    await page.evaluate(() => document.getElementById('v').dispatchEvent(new Event('loadstart')));
+    assert.deepEqual(await page.evaluate(() => [document.getElementById('v').volume, window.__gainNodes.length]), [1, 0]);
+    await page.evaluate(() => { window.__context.state = 'running'; });
+    await page.click('body');
+    assert.equal(await page.evaluate(() => window.__gainNodes[0]?.gain.value), 2.5);
   }, { stored: { volumeControl: true, volumeControlLevel: 250 } });
 });
 
