@@ -26,7 +26,7 @@ async function answerQuestion(page, correct = true) {
 }
 
 async function solveQuiz(page) {
-  for (let index = 0; index < 5; index++) await answerQuestion(page);
+  for (let index = 0; index < 3; index++) await answerQuestion(page);
   await page.waitForFunction(() => !document.getElementById('unblock-challenge').open && !document.getElementById('blocker-settings').disabled);
 }
 
@@ -71,9 +71,9 @@ test('blocker challenge works in the built extension, survives reload, and guard
     assert.equal(await page.evaluate(() => document.activeElement.id), 'challenge-answer');
     await answerQuestion(page);
     await answerQuestion(page);
-    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 3 of 5');
+    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 3 of 3');
     await answerQuestion(page, false);
-    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 1 of 5');
+    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 1 of 3');
     assert.match(await page.$eval('#challenge-error', element => element.textContent), /Progress reset/);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.getElementById('unblock-challenge').open && !document.getElementById('blocker-settings').disabled);
@@ -89,7 +89,7 @@ test('blocker challenge works in the built extension, survives reload, and guard
     assert.equal(await page.$eval('.rule-item input', element => element.checked), true);
     await page.click('.rule-item .switch');
     await page.waitForSelector('#unblock-challenge[open]');
-    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 1 of 5');
+    assert.equal(await page.$eval('#challenge-progress', element => element.textContent), 'Question 1 of 3');
     await solveQuiz(page);
     assert.equal(await page.$eval('.rule-item input', element => element.checked), false);
     await page.click('.rule-item .switch');

@@ -2,7 +2,7 @@ const RULES_STORAGE_KEY = 'websiteBlockerRules';
 const SCHEDULE_STORAGE_KEY = 'websiteBlockerSchedule';
 const CHALLENGE_STORAGE_KEY = 'websiteBlockerChallengeEnabled';
 const DEFAULT_SCHEDULE = { start: '09:00', end: '17:00' };
-const CHALLENGE_LENGTH = 5;
+const CHALLENGE_LENGTH = 3;
 let settingsChangePending = false;
 
 function createChallengeQuestion() {

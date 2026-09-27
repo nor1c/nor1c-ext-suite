@@ -115,7 +115,7 @@ function answerFor(text) {
 }
 
 async function solve(harness) {
-  for (let index = 0; index < 5; index++) {
+  for (let index = 0; index < 3; index++) {
     harness.el('challenge-answer').value = answerFor(harness.el('challenge-question').textContent);
     await harness.el('challenge-form').dispatch('submit');
   }
@@ -137,7 +137,7 @@ test('challenge defaults off and existing settings migrate without enabling it',
   assert.deepEqual(legacy.state.websiteBlockerRules, [{ id: '1', domain: 'example.com', enabled: true }]);
 });
 
-test('questions have exact integer solutions and require five consecutive answers', () => {
+test('questions have exact integer solutions and require three consecutive answers', () => {
   const h = panelHarness();
   for (let index = 0; index < 100; index++) {
     const question = h.run('createChallengeQuestion()');
@@ -154,7 +154,8 @@ test('questions have exact integer solutions and require five consecutive answer
   assert.equal(session.submit(String(session.question.answer + 1)), 'wrong');
   assert.equal(session.correct, 0);
   assert.notEqual(session.question, previousQuestion);
-  for (let index = 0; index < 4; index++) assert.equal(session.submit(String(session.question.answer)), 'next');
+  assert.equal(session.submit(String(session.question.answer)), 'next');
+  assert.equal(session.submit(String(session.question.answer)), 'next');
   assert.equal(session.submit(String(session.question.answer)), 'complete');
 });
 
@@ -192,7 +193,7 @@ test('successful quiz authorizes only one action and preserves other-panel chang
   const deletion = h.run('deleteRule("1")');
   await flush();
   assert.equal(h.el('unblock-challenge').open, true);
-  assert.equal(h.el('challenge-progress').textContent, 'Question 1 of 5');
+  assert.equal(h.el('challenge-progress').textContent, 'Question 1 of 3');
   await solve(h);
   await deletion;
   assert.deepEqual(h.state.websiteBlockerRules, [{ id: '2', domain: 'other.test', enabled: true }]);
