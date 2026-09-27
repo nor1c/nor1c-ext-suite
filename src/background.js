@@ -3,6 +3,7 @@ let downloaderLoadPromise = null;
 const downloaderFrames = new Set();
 const playingVideosByTab = new Map();
 const detectedVideoSourcesByTab = new Map();
+const activePlaybackByTab = new Map();
 const MAX_VIDEO_SOURCES_PER_TAB = 100;
 self.__nor1cVideoDownloadEnabled = true;
 self.__nor1cPlayingVideos = playingVideosByTab;
@@ -65,6 +66,7 @@ function persistVideoSources(tabId, sources) {
 
 function rememberVideoSource(details) {
   if (!videoDownloadEnabled || details.tabId < 0 || !isLikelyVideoSource(details)) return;
+  if (!activePlaybackByTab.has(details.tabId)) return;
   const requestUrl = normalizedVideoUrl(details.url);
   const url = fullVideoUrl(requestUrl);
   const sources = detectedVideoSourcesByTab.get(details.tabId) || new Map();
@@ -83,6 +85,22 @@ function rememberVideoSource(details) {
   });
   while (sources.size > MAX_VIDEO_SOURCES_PER_TAB) sources.delete(sources.keys().next().value);
   persistVideoSources(details.tabId, sources);
+  updateVideoBadge(details.tabId);
+}
+
+function updateVideoBadge(tabId) {
+  const featureCounts = badgeCounts[tabId] || (badgeCounts[tabId] = {});
+  featureCounts.video = detectedVideoSourcesByTab.get(tabId)?.size || 0;
+  updateBadge(tabId);
+}
+
+function resetVideoSources(tabId) {
+  detectedVideoSourcesByTab.delete(tabId);
+  activePlaybackByTab.delete(tabId);
+  if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
+  const featureCounts = badgeCounts[tabId] || (badgeCounts[tabId] = {});
+  featureCounts.video = 0;
+  updateBadge(tabId);
 }
 
 function rememberVideoResponse(details) {
@@ -256,8 +274,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     const frameId = sender.frameId === undefined ? 0 : sender.frameId;
     const frames = playingVideosByTab.get(tabId) || new Map();
-    if (normalized.length > 0) frames.set(frameId, new Set(normalized));
-    else frames.delete(frameId);
+    if (normalized.length > 0) {
+      frames.set(frameId, new Set(normalized));
+      const playbackKey = Array.from(frames.values())
+        .flatMap(urls => Array.from(urls))
+        .sort()
+        .join('|');
+      if (activePlaybackByTab.get(tabId) !== playbackKey) {
+        activePlaybackByTab.set(tabId, playbackKey);
+        detectedVideoSourcesByTab.delete(tabId);
+        if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
+        const featureCounts = badgeCounts[tabId] || (badgeCounts[tabId] = {});
+        featureCounts.video = 0;
+        updateBadge(tabId);
+      }
+    } else {
+      frames.delete(frameId);
+      if (frames.size === 0) resetVideoSources(tabId);
+    }
     if (frames.size > 0) playingVideosByTab.set(tabId, frames);
     else playingVideosByTab.delete(tabId);
     chrome.runtime.sendMessage({ action: 'video-added' }).catch(() => {});
@@ -296,6 +330,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   delete badgeCounts[tabId];
   playingVideosByTab.delete(tabId);
   detectedVideoSourcesByTab.delete(tabId);
+  activePlaybackByTab.delete(tabId);
   if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
   clearDownloaderFrames(tabId);
 });
@@ -305,6 +340,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     badgeCounts[tabId] = {};
     playingVideosByTab.delete(tabId);
     detectedVideoSourcesByTab.delete(tabId);
+    activePlaybackByTab.delete(tabId);
     if (chrome.storage.session) chrome.storage.session.remove('videoSources:' + tabId).catch(() => {});
     clearDownloaderFrames(tabId);
     updateBadge(tabId);

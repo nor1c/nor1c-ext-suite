@@ -10,7 +10,7 @@
   function getPlayingUrls() {
     const urls = [];
     playingVideos.forEach(video => {
-      if (!video.isConnected || video.paused || video.ended || video.readyState < 3) {
+      if (!video.isConnected || video.paused || video.ended) {
         playingVideos.delete(video);
         return;
       }
@@ -37,7 +37,7 @@
     publishState();
   }
 
-  ['playing', 'pause', 'ended', 'emptied', 'waiting', 'stalled', 'abort'].forEach(type => {
+  ['playing', 'pause', 'ended', 'emptied', 'waiting', 'stalled', 'abort', 'loadstart', 'loadedmetadata', 'durationchange'].forEach(type => {
     document.addEventListener(type, handlePlaybackEvent, true);
   });
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
