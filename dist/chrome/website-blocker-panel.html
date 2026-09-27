@@ -17,6 +17,21 @@
       <p class="subtitle">Block websites during specific hours so you can stay focused.</p>
     </header>
 
+    <p id="settings-error" class="error-msg settings-error" role="alert"></p>
+    <fieldset id="blocker-settings" class="settings-fields" aria-label="Website blocker settings">
+    <section class="add-section">
+      <h2 class="section-title">Challenge Protection</h2>
+      <div class="protection-row">
+        <label for="challenge-enabled" class="protection-label">Require challenge to unblock</label>
+        <label class="switch">
+          <input type="checkbox" id="challenge-enabled" aria-describedby="challenge-hint">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p id="challenge-hint" class="blocker-hint">Solve 5 multi-step math questions correctly in a row before disabling or deleting a site, changing the schedule, or turning off this protection. A wrong answer resets your progress.</p>
+      <p class="blocker-hint">Adding sites and re-enabling blocks stay easy. This is a pause for impulses, not a lock against disabling the extension in your browser.</p>
+    </section>
+
     <section class="add-section">
       <h2 class="section-title">Blocking Schedule</h2>
       <div class="time-row">
@@ -30,7 +45,8 @@
           <input type="time" id="blocked-end" class="time-input" value="17:00">
         </div>
       </div>
-      <p class="blocker-hint">This schedule applies to every enabled website below and can be changed anytime.</p>
+      <button id="save-schedule-btn" class="btn btn-secondary" type="button">Save Schedule</button>
+      <p class="blocker-hint">This schedule applies to every enabled website below. Changes require a challenge when protection is on.</p>
     </section>
 
     <section class="add-section">
@@ -50,10 +66,29 @@
       </div>
     </section>
 
+    </fieldset>
+
     <footer class="footer">
       <p>Rules are checked during page navigation. Set the time range when sites should be <strong>blocked</strong>.</p>
     </footer>
   </div>
+
+  <dialog id="unblock-challenge" class="challenge-dialog" aria-labelledby="challenge-title" aria-describedby="challenge-action challenge-instructions">
+    <form id="challenge-form" novalidate>
+      <h2 id="challenge-title" class="title">Pause before unblocking</h2>
+      <p id="challenge-action" class="challenge-action"></p>
+      <p id="challenge-instructions" class="blocker-hint">Answer 5 questions correctly in a row. Multiply inside each pair of parentheses first. A wrong answer restarts the quiz. Cancel or press Escape to keep your settings unchanged.</p>
+      <p id="challenge-progress" class="challenge-progress" role="status"></p>
+      <p id="challenge-question" class="challenge-question"></p>
+      <label for="challenge-answer" class="time-label">Your answer</label>
+      <input id="challenge-answer" class="domain-input challenge-answer" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-describedby="challenge-question challenge-error" autofocus>
+      <p id="challenge-error" class="error-msg" role="alert"></p>
+      <div class="challenge-actions">
+        <button id="challenge-cancel" class="btn btn-secondary" type="button">Cancel — keep blocking</button>
+        <button class="btn btn-primary" type="submit">Check answer</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="lib/utils.js"></script>
   <script src="website-blocker-panel.js"></script>

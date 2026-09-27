@@ -27,7 +27,8 @@ const BACKUP_KEYS = [
   'blockedSelectors',
   'ytControlPanel',
   'websiteBlockerRules',
-  'websiteBlockerSchedule'
+  'websiteBlockerSchedule',
+  'websiteBlockerChallengeEnabled'
 ];
 const YT_STRING_SETTING_KEYS = new Set([
   'enforceTheme',
@@ -91,6 +92,7 @@ function validateSetting(key, value) {
       return false;
     });
   }
+  if (key === 'websiteBlockerChallengeEnabled') return typeof value === 'boolean';
   if (key === 'websiteBlockerRules') {
     if (!Array.isArray(value)) return false;
     return value.every(rule =>
@@ -125,6 +127,16 @@ function validateBackupPayload(payload) {
       : payload.data[key];
   }
   return settings;
+}
+
+async function ensureBlockerImportAllowed(settings) {
+  const blockerKeys = ['websiteBlockerRules', 'websiteBlockerSchedule', 'websiteBlockerChallengeEnabled'];
+  if (!blockerKeys.some(key => key in settings)) return;
+  const current = await chrome.storage.sync.get(blockerKeys);
+  if (current.websiteBlockerChallengeEnabled !== true) return;
+  if (blockerKeys.some(key => key in settings && JSON.stringify(settings[key]) !== JSON.stringify(current[key]))) {
+    throw new Error('Complete the challenge to turn off protection in Manage Blocked Sites before importing blocker changes.');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -698,18 +710,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('import-file').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const importError = document.getElementById('import-error');
+    importError.textContent = '';
     try {
       const text = await file.text();
       const payload = JSON.parse(text);
       const toSet = validateBackupPayload(payload);
+      await ensureBlockerImportAllowed(toSet);
       await chrome.storage.sync.set(toSet);
       window.location.reload();
     } catch (err) {
-      const importBtn = document.getElementById('import-btn');
-      const originalText = importBtn.textContent;
-      importBtn.textContent = err instanceof Error ? err.message : 'Import failed';
-      importBtn.style.color = '#ef4444';
-      setTimeout(() => { importBtn.textContent = originalText; importBtn.style.color = ''; }, 3000);
+      importError.textContent = err instanceof Error ? err.message : 'Import failed';
     }
     e.target.value = '';
   });
