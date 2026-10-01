@@ -4,14 +4,14 @@
   const savedPosts = new Map();
 
   chrome.storage.local.get({ [SAVED_POSTS_KEY]: [] }).then(result => {
-    for (const post of result[SAVED_POSTS_KEY] || []) savedPosts.set(post.id, post.status);
+    for (const post of result[SAVED_POSTS_KEY] || []) savedPosts.set(post.id, post);
     updateButtons();
   }).catch(() => {});
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes[SAVED_POSTS_KEY]) return;
     savedPosts.clear();
-    for (const post of changes[SAVED_POSTS_KEY].newValue || []) savedPosts.set(post.id, post.status);
+    for (const post of changes[SAVED_POSTS_KEY].newValue || []) savedPosts.set(post.id, post);
     updateButtons();
   });
 
@@ -100,7 +100,7 @@
   function setButtonState(button, state, message) {
     button.dataset.state = state;
     button.disabled = state === 'saving';
-    const labels = { saved: 'Remove saved post', saving: 'Saving post…', partial: 'Retry saving media', idle: 'Save post' };
+    const labels = { saved: 'Edit saved post folders', saving: 'Saving post…', partial: 'Retry saving media', idle: 'Save post' };
     const paths = {
       saved: '<path d="M4 6h16v12H4zM4 14h4l2 3h4l2-3h4"/><path d="m9 11 2 2 4-4"/>',
       saving: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>',
@@ -112,7 +112,12 @@
     button.setAttribute('aria-label', button.title);
   }
 
-  async function chooseFolder() {
+  function savedFolderIds(post) {
+    if (Array.isArray(post?.folderIds)) return post.folderIds;
+    return typeof post?.folderId === 'string' && post.folderId ? [post.folderId] : [];
+  }
+
+  async function chooseFolder(initialFolderIds = [], canDelete = false) {
     try {
       const result = await chrome.runtime.sendMessage({ type: 'get-saved-folders' });
       if (!result?.success) return '';
@@ -131,20 +136,43 @@
           .folder { width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid #cfd9de; border-radius: 9px; background: #fff; color: #0f1419; text-align: left; font: inherit; font-size: 14px; cursor: pointer; }
           .folder:hover, .folder.selected { border-color: #1d9bf0; background: #eff7ff; }
           .new-folder { display: flex; gap: 8px; margin-top: 12px; } input { min-width: 0; flex: 1; height: 36px; padding: 0 10px; border: 1px solid #cfd9de; border-radius: 8px; font: inherit; } button { height: 36px; padding: 0 13px; border: 1px solid #cfd9de; border-radius: 999px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; } button.primary { border-color: #1d9bf0; background: #1d9bf0; color: #fff; } button:hover { background: #eff3f4; } button.primary:hover { background: #1a8cd8; }
-          .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-        </style><div class="backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="nor1c-folder-title"><h2 id="nor1c-folder-title">Save post</h2><p>Choose a folder for this saved post.</p><div class="folders"><button type="button" class="folder selected" data-id="">No folder</button></div><div class="new-folder"><input maxlength="60" placeholder="New folder name" aria-label="New folder name"><button type="button" class="create">Create</button></div><div class="actions"><button type="button" class="cancel">Cancel</button><button type="button" class="primary confirm">Save</button></div></section></div>`;
+          .actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; } .actions .cancel { margin-left: auto; }
+          button.delete-all { border-color: #f0b4b4; color: #b42318; } button.delete-all:hover { border-color: #e48787; background: #fff1f1; }
+        </style><div class="backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="nor1c-folder-title"><h2 id="nor1c-folder-title">Save post</h2><p>Choose one or more folders for this saved post.</p><div class="folders"><button type="button" class="folder" data-id="" aria-pressed="false">No folder</button></div><div class="new-folder"><input maxlength="60" placeholder="New folder name" aria-label="New folder name"><button type="button" class="create">Create</button></div><div class="actions"><button type="button" class="delete-all">Delete from all folders</button><button type="button" class="cancel">Cancel</button><button type="button" class="primary confirm">Save</button></div></section></div>`;
         document.documentElement.appendChild(host);
         const foldersEl = shadow.querySelector('.folders');
         const input = shadow.querySelector('input');
-        let selectedId = '';
+        const allowedIds = new Set((result.folders || []).map(folder => folder.id));
+        const selectedIds = new Set(initialFolderIds.filter(id => allowedIds.has(id)));
+        const deleteAll = shadow.querySelector('.delete-all');
+        deleteAll.hidden = !canDelete;
         let settled = false;
         const finish = value => { if (settled) return; settled = true; host.remove(); resolve(value); };
-        const selectFolder = (id, node) => { selectedId = id; foldersEl.querySelectorAll('.folder').forEach(item => item.classList.remove('selected')); node.classList.add('selected'); };
+        const syncNoFolder = () => {
+          const node = foldersEl.querySelector('[data-id=""]');
+          node?.classList.toggle('selected', selectedIds.size === 0);
+          node?.setAttribute('aria-pressed', String(selectedIds.size === 0));
+        };
+        const toggleFolder = (id, node) => {
+          if (!id) {
+            selectedIds.clear();
+            foldersEl.querySelectorAll('.folder[data-id]:not([data-id=""])').forEach(item => { item.classList.remove('selected'); item.setAttribute('aria-pressed', 'false'); });
+          } else if (selectedIds.has(id)) {
+            selectedIds.delete(id);
+            node.classList.remove('selected');
+          } else {
+            selectedIds.add(id);
+            node.classList.add('selected');
+          }
+          syncNoFolder();
+        };
         const noFolder = foldersEl.querySelector('.folder');
-        noFolder.addEventListener('click', () => selectFolder('', noFolder));
-        for (const folder of result.folders || []) { const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = folder.id; node.textContent = folder.name; node.addEventListener('click', () => selectFolder(folder.id, node)); foldersEl.appendChild(node); }
-        shadow.querySelector('.create').addEventListener('click', async () => { const name = input.value.trim(); if (!name) return input.focus(); const created = await chrome.runtime.sendMessage({ type: 'create-saved-folder', name }); if (!created?.success) return; const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = created.folder.id; node.textContent = created.folder.name; node.addEventListener('click', () => selectFolder(created.folder.id, node)); foldersEl.appendChild(node); selectFolder(created.folder.id, node); input.value = ''; });
-        shadow.querySelector('.confirm').addEventListener('click', () => finish(selectedId));
+        noFolder.addEventListener('click', () => toggleFolder('', noFolder));
+        for (const folder of result.folders || []) { const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = folder.id; node.textContent = folder.name; node.classList.toggle('selected', selectedIds.has(folder.id)); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); node.addEventListener('click', () => { toggleFolder(folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); }); foldersEl.appendChild(node); }
+        syncNoFolder();
+        shadow.querySelector('.create').addEventListener('click', async () => { const name = input.value.trim(); if (!name) return input.focus(); const created = await chrome.runtime.sendMessage({ type: 'create-saved-folder', name }); if (!created?.success) return; const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = created.folder.id; node.textContent = created.folder.name; node.setAttribute('aria-pressed', 'true'); node.addEventListener('click', () => { toggleFolder(created.folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(created.folder.id))); }); foldersEl.appendChild(node); toggleFolder(created.folder.id, node); input.value = ''; });
+        shadow.querySelector('.confirm').addEventListener('click', () => finish({ action: 'save', folderIds: Array.from(selectedIds) }));
+        deleteAll.addEventListener('click', () => finish({ action: 'delete' }));
         shadow.querySelector('.cancel').addEventListener('click', () => finish(null));
         shadow.querySelector('.backdrop').addEventListener('click', event => { if (event.target === event.currentTarget) finish(null); });
         host.addEventListener('keydown', event => {
@@ -161,7 +189,7 @@
   function updateButtons() {
     document.querySelectorAll(`.${BUTTON_CLASS}`).forEach(button => {
       if (button.dataset.state === 'saving') return;
-      const status = savedPosts.get(button.dataset.postId);
+      const status = savedPosts.get(button.dataset.postId)?.status;
       if (status === 'partial') setButtonState(button, 'partial');
       else if (status === 'complete') setButtonState(button, 'saved');
       else setButtonState(button, 'idle');
@@ -200,39 +228,34 @@
       event.preventDefault();
       event.stopPropagation();
       const previousState = button.dataset.state;
-      const isSaved = previousState === 'saved';
+      const savedPost = savedPosts.get(post.id);
       const retry = previousState === 'partial';
-      if (isSaved) setButtonState(button, 'saving');
       try {
-        const response = isSaved
+        const selection = await chooseFolder(savedFolderIds(savedPost), Boolean(savedPost));
+        if (selection === null) return;
+        setButtonState(button, 'saving');
+        const response = selection.action === 'delete'
           ? await chrome.runtime.sendMessage({ type: 'remove-x-post', id: post.id })
           : await (async () => {
             const payload = collectPost(article, post);
-            const folderId = await chooseFolder();
-            if (folderId === null) return { cancelled: true };
-            setButtonState(button, 'saving');
-            payload.folderId = folderId;
+            payload.folderIds = selection.folderIds;
             return chrome.runtime.sendMessage({ type: 'save-x-post', post: payload, retry });
           })();
-        if (response?.cancelled) {
-          setButtonState(button, 'idle');
-          return;
-        }
         if (!response || !response.success) throw new Error(response?.error || 'Could not save this post.');
-        if (isSaved) {
+        if (selection.action === 'delete') {
           savedPosts.delete(post.id);
           setButtonState(button, 'idle', 'Save post and media to Nor1c Suite');
         } else {
-          savedPosts.set(post.id, response.post.status);
-          if (response.post.status === 'complete') setButtonState(button, 'saved', 'Remove saved post');
+          savedPosts.set(post.id, response.post);
+          if (response.post.status === 'complete') setButtonState(button, 'saved', 'Edit saved post folders');
           else setButtonState(button, 'partial', response.post.error || 'Some media could not be saved. Select to retry.');
         }
       } catch (error) {
-        setButtonState(button, 'idle', error instanceof Error ? error.message : 'Could not save this post.');
+        setButtonState(button, savedPost?.status === 'complete' ? 'saved' : retry ? 'partial' : 'idle', error instanceof Error ? error.message : 'Could not save this post.');
       }
     });
 
-    const status = savedPosts.get(post.id);
+    const status = savedPosts.get(post.id)?.status;
     setButtonState(button, status === 'partial' ? 'partial' : status === 'complete' ? 'saved' : 'idle');
     const wrapper = document.createElement('div');
     wrapper.className = 'nor1c-save-x-post-wrapper';

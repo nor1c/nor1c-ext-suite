@@ -14,7 +14,10 @@
   <main class="page">
     <aside class="folders-sidebar">
       <nav id="folders-bar" class="folders-bar" aria-label="Saved post folders">
-        <button class="folder-chip is-active" type="button" data-folder-id="">All posts</button>
+        <button class="folder-chip is-active" type="button" data-folder-id="">
+          <span class="folder-chip-name">All posts</span>
+          <span class="folder-chip-count">0</span>
+        </button>
         <button id="new-folder-btn" class="folder-add" type="button" title="Create folder" aria-label="Create folder">+</button>
       </nav>
     </aside>
@@ -31,8 +34,24 @@
     <p id="page-error" class="page-error" role="alert"></p>
     <p id="empty-state" class="empty-state" hidden>No saved posts yet.</p>
       <section id="posts-list" class="posts-list" aria-label="Saved posts"></section>
+      <nav id="pagination" class="pagination" aria-label="Saved posts pagination" hidden>
+        <button id="pagination-prev" class="pagination-button" type="button">Previous</button>
+        <span id="pagination-status" class="pagination-status" aria-live="polite">Page 1 of 1</span>
+        <button id="pagination-next" class="pagination-button" type="button">Next</button>
+      </nav>
     </div>
   </main>
+  <dialog id="folder-manager" class="folder-manager" aria-labelledby="folder-manager-title">
+    <form method="dialog" class="folder-manager-panel">
+      <h2 id="folder-manager-title">Organize post</h2>
+      <p>Select one or more folders for this saved post.</p>
+      <div id="folder-manager-list" class="folder-manager-list"></div>
+      <div class="folder-manager-actions">
+        <button id="folder-manager-cancel" class="dialog-button" type="button">Cancel</button>
+        <button id="folder-manager-save" class="dialog-button dialog-button-primary" type="button">Save</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="image-viewer" class="image-viewer" aria-label="Saved media preview">
     <button id="image-viewer-close" class="icon-button image-viewer-close" type="button" title="Close media viewer" aria-label="Close media viewer">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>

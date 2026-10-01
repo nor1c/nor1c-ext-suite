@@ -34,6 +34,25 @@
     return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
   }
 
+  function validFolderIds(value, folders) {
+    const allowed = new Set(folders.map(folder => folder.id));
+    const values = Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [];
+    return [...new Set(values.filter(id => typeof id === 'string' && allowed.has(id)))];
+  }
+
+  function postFolderIds(post, folders) {
+    return validFolderIds(Array.isArray(post?.folderIds) ? post.folderIds : post?.folderId, folders);
+  }
+
+  function sameFolderIds(left, right) {
+    return left.length === right.length && left.every(id => right.includes(id));
+  }
+
+  function isExtensionPage(sender) {
+    const baseUrl = chrome.runtime.getURL('');
+    return [sender?.url, sender?.tab?.url].some(value => typeof value === 'string' && value.startsWith(baseUrl));
+  }
+
   function isXPage(value) {
     try {
       return ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(new URL(value).hostname.toLowerCase());
@@ -270,16 +289,19 @@
 
   async function savePost(input, sender, retry = false) {
     if (!sender.tab || !isXPage(sender.tab.url || sender.url)) throw new Error('Save posts from an X or Twitter page.');
-    const canonical = store.canonicalPostUrl(input?.url);
+    input = input && typeof input === 'object' ? input : {};
+    const canonical = store.canonicalPostUrl(input.url);
     if (!canonical || canonical.id !== String(input.id)) throw new Error('This post URL is invalid.');
     const posts = await getPosts();
     const folders = await getFolders();
-    const folderId = typeof input.folderId === 'string' && folders.some(folder => folder.id === input.folderId) ? input.folderId : '';
     const existingIndex = posts.findIndex(post => post.id === canonical.id);
     const existing = existingIndex >= 0 ? posts[existingIndex] : null;
+    const hasFolderSelection = Array.isArray(input.folderIds) || typeof input.folderId === 'string';
+    const folderIds = hasFolderSelection ? validFolderIds(input.folderIds ?? input.folderId, folders) : postFolderIds(existing, folders);
     if (existing?.status === 'complete' && !retry) {
-      if (existing.folderId !== folderId) {
-        const updated = { ...existing, folderId, updatedAt: Date.now() };
+      if (!sameFolderIds(postFolderIds(existing, folders), folderIds) || !Array.isArray(existing.folderIds)) {
+        const updated = { ...existing, folderIds, updatedAt: Date.now() };
+        delete updated.folderId;
         posts.splice(existingIndex, 1, updated);
         await chrome.storage.local.set({ [STORAGE_KEY]: posts });
         return updated;
@@ -354,7 +376,7 @@
       createdAt: safeText(input.createdAt, 80),
       savedAt: existing?.savedAt || Date.now(),
       updatedAt: Date.now(),
-      folderId: existing?.folderId || folderId,
+      folderIds: hasFolderSelection ? folderIds : postFolderIds(existing, folders),
       status: failures.length ? 'partial' : 'complete',
       error: failures.length ? `${failures.length} media item(s) could not be saved.` : '',
       media
@@ -375,7 +397,7 @@
   }
 
   async function createFolder(name, sender) {
-    if (!sender.tab || !isXPage(sender.tab.url || sender.url)) throw new Error('Create folders from an X or Twitter page.');
+    if (!isXPage(sender.tab?.url || sender.url) && !isExtensionPage(sender)) throw new Error('Create folders from an X page or the saved posts page.');
     const folderName = safeFolderName(name);
     if (!folderName) throw new Error('Folder name is required.');
     const folders = await getFolders();
@@ -388,14 +410,33 @@
   }
 
   async function deleteFolder(folderId, sender) {
-    if (!sender.url?.startsWith(chrome.runtime.getURL(''))) throw new Error('Manage folders from the saved posts page.');
+    if (!isExtensionPage(sender)) throw new Error('Manage folders from the saved posts page.');
+    const targetId = String(folderId);
     const folders = await getFolders();
-    const remaining = folders.filter(folder => folder.id !== String(folderId));
+    const remaining = folders.filter(folder => folder.id !== targetId);
     await chrome.storage.local.set({ [FOLDERS_KEY]: remaining });
     const posts = await getPosts();
-    const updated = posts.map(post => post.folderId === String(folderId) ? { ...post, folderId: '' } : post);
+    const updated = posts.map(post => {
+      const folderIds = postFolderIds(post, folders).filter(id => id !== targetId);
+      const record = { ...post, folderIds };
+      delete record.folderId;
+      return record;
+    });
     await chrome.storage.local.set({ [STORAGE_KEY]: updated });
     return { success: true };
+  }
+
+  async function updatePostFolders(postId, folderIds, sender) {
+    if (!isExtensionPage(sender)) throw new Error('Manage folders from the saved posts page.');
+    const posts = await getPosts();
+    const index = posts.findIndex(post => post.id === String(postId));
+    if (index < 0) throw new Error('Saved post was not found.');
+    const folders = await getFolders();
+    const updated = { ...posts[index], folderIds: validFolderIds(folderIds, folders), updatedAt: Date.now() };
+    delete updated.folderId;
+    posts.splice(index, 1, updated);
+    await chrome.storage.local.set({ [STORAGE_KEY]: posts });
+    return updated;
   }
 
   async function deletePost(postId) {
@@ -431,6 +472,12 @@
         .catch(error => sendResponse({ success: false, error: error instanceof Error ? error.message : 'Could not delete folder.' }));
       return true;
     }
+    if (message?.type === 'update-saved-post-folders') {
+      serialize(() => updatePostFolders(message.id, message.folderIds, sender))
+        .then(post => sendResponse({ success: true, post }))
+        .catch(error => sendResponse({ success: false, error: error instanceof Error ? error.message : 'Could not update post folders.' }));
+      return true;
+    }
     if (message?.type === 'remove-x-post') {
       if (!sender.tab || !isXPage(sender.tab.url || sender.url)) {
         sendResponse({ success: false, error: 'Remove saved posts from an X or Twitter page.' });
@@ -442,7 +489,7 @@
       return true;
     }
     if (message?.type === 'delete-x-post') {
-      if (!sender.url?.startsWith(chrome.runtime.getURL(''))) {
+      if (!isExtensionPage(sender)) {
         sendResponse({ success: false, error: 'This action is only available from the saved posts page.' });
         return false;
       }

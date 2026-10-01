@@ -37,7 +37,7 @@ function createStore() {
 
 function createBackgroundHarness(fetchImpl = async () => { throw new Error('network unavailable'); }) {
   const store = createStore();
-  const postsState = { savedXPosts: [] };
+  const postsState = { savedXPosts: [], savedXFolders: [] };
   let messageListener;
   const chrome = {
     runtime: {
@@ -46,8 +46,12 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
     },
     storage: {
       local: {
-        async get(defaults) { return { ...defaults, savedXPosts: structuredClone(postsState.savedXPosts) }; },
-        async set(values) { postsState.savedXPosts = structuredClone(values.savedXPosts); }
+        async get(defaults) {
+          return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, structuredClone(postsState[key] ?? value)]));
+        },
+        async set(values) {
+          for (const [key, value] of Object.entries(values)) postsState[key] = structuredClone(value);
+        }
       }
     }
   };
@@ -141,6 +145,40 @@ test('background saves post metadata locally and deduplicates by post ID', async
   assert.equal(harness.postsState.savedXPosts.length, 1);
 });
 
+test('saved posts can belong to multiple folders and be reorganized from the dedicated view', async () => {
+  const harness = createBackgroundHarness();
+  const firstFolder = await harness.send({ type: 'create-saved-folder', name: 'Research' });
+  const secondFolder = await harness.send({ type: 'create-saved-folder', name: 'Favorites' });
+  const post = { id: '124', url: 'https://x.com/noric/status/124', author: 'noric', media: [], folderIds: [firstFolder.folder.id, secondFolder.folder.id] };
+
+  const saved = await harness.send({ type: 'save-x-post', post });
+  const updated = await harness.send({ type: 'update-saved-post-folders', id: post.id, folderIds: [secondFolder.folder.id] }, {
+    tab: { id: 9, url: 'chrome-extension://test/saved-posts.html' },
+    url: 'chrome-extension://test/saved-posts.html'
+  });
+
+  assert.deepEqual(Array.from(saved.post.folderIds), [firstFolder.folder.id, secondFolder.folder.id]);
+  assert.equal(updated.success, true);
+  assert.deepEqual(Array.from(updated.post.folderIds), [secondFolder.folder.id]);
+  assert.deepEqual(harness.postsState.savedXPosts[0].folderIds, [secondFolder.folder.id]);
+});
+
+test('deleting one folder preserves a post other folder assignments', async () => {
+  const harness = createBackgroundHarness();
+  const firstFolder = await harness.send({ type: 'create-saved-folder', name: 'First' });
+  const secondFolder = await harness.send({ type: 'create-saved-folder', name: 'Second' });
+  const post = { id: '125', url: 'https://x.com/noric/status/125', author: 'noric', media: [], folderIds: [firstFolder.folder.id, secondFolder.folder.id] };
+  await harness.send({ type: 'save-x-post', post });
+
+  const result = await harness.send({ type: 'delete-saved-folder', id: firstFolder.folder.id }, {
+    tab: { id: 9, url: 'chrome-extension://test/saved-posts.html' },
+    url: 'chrome-extension://test/saved-posts.html'
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(harness.postsState.savedXPosts[0].folderIds, [secondFolder.folder.id]);
+});
+
 test('background stores image bytes in extension media storage', async () => {
   const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const harness = createBackgroundHarness(async url => {
@@ -164,6 +202,20 @@ test('background stores image bytes in extension media storage', async () => {
   assert.equal(entry.status, 'saved');
   assert.equal(entry.mimeType, 'image/png');
   assert.equal(harness.store.media.get(entry.mediaKey).blob.size, imageBytes.length);
+});
+
+test('retrying media keeps existing folder assignments when no new selection is sent', async () => {
+  const harness = createBackgroundHarness();
+  const folder = await harness.send({ type: 'create-saved-folder', name: 'Keep me' });
+  const post = {
+    id: '344', url: 'https://x.com/noric/status/344', author: 'noric', media: [], folderIds: [folder.folder.id]
+  };
+
+  const saved = await harness.send({ type: 'save-x-post', post });
+  const retried = await harness.send({ type: 'save-x-post', post: { ...post, folderIds: undefined }, retry: true });
+
+  assert.deepEqual(Array.from(saved.post.folderIds), [folder.folder.id]);
+  assert.deepEqual(Array.from(retried.post.folderIds), [folder.folder.id]);
 });
 
 test('background retries failed media and replaces it with a stored copy', async () => {
@@ -227,11 +279,34 @@ test('popup places the icon-only Saved X Posts shortcut at the top and makes it 
   assert.match(styles, /\.saved-posts-shortcut\s*\{[^}]*position:\s*sticky/);
 });
 
-test('saved posts folder filters include a working All posts control', () => {
+test('saved posts folder filters and per-post organizer support multiple folders', () => {
   const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
   assert.match(gallerySource, /function selectAllPosts\(\)/);
   assert.match(gallerySource, /allPosts\?\.addEventListener\('click', selectAllPosts\)/);
-  assert.match(gallerySource, /activeFolderId = '';[\s\S]*renderPosts\(\);/);
+  assert.match(gallerySource, /postFolderIds\(post\)\.includes\(activeFolderId\)/);
+  assert.match(gallerySource, /type: 'update-saved-post-folders'/);
+  assert.match(gallerySource, /postFolderIds\(post\)\.filter\(id => id !== folderId\)/);
+  assert.match(gallerySource, /activeFolderId \? 'Remove post from this folder' : 'Remove saved post'/);
+  assert.match(gallerySource, /iconButton\('button', 'folder-button', 'Organize post folders'/);
+  assert.match(html, /id="folder-manager"/);
+});
+
+test('saved posts folder list shows item counts and paginates 30 posts per page', () => {
+  const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'saved-posts.css'), 'utf8');
+  assert.match(gallerySource, /const POSTS_PER_PAGE = 30/);
+  assert.match(gallerySource, /const folderCounts = new Map/);
+  assert.match(gallerySource, /folderCounts\.set\(folderId, folderCounts\.get\(folderId\) \+ 1\)/);
+  assert.match(gallerySource, /visiblePosts\.slice\(pageRange\.start, pageRange\.end\)/);
+  assert.match(gallerySource, /currentPage = 1; renderPosts\(\)/);
+  assert.match(html, /class="folder-chip-count">0<\/span>/);
+  assert.match(html, /id="pagination"/);
+  assert.match(html, /id="pagination-prev"/);
+  assert.match(html, /id="pagination-next"/);
+  assert.match(styles, /\.folder-chip-count\s*\{/);
+  assert.match(styles, /\.pagination\s*\{/);
 });
 
 test('saved posts page uses a responsive grid for compact browsing', () => {
@@ -281,14 +356,19 @@ test('X save button supports compact icon states and removal messages', () => {
   const contentSource = fs.readFileSync(path.join(root, 'src', 'content', 'x-saved-posts.js'), 'utf8');
   const styles = fs.readFileSync(path.join(root, 'src', 'content', 'x-saved-posts.css'), 'utf8');
   assert.match(contentSource, /remove-x-post/);
+  assert.match(contentSource, /Delete from all folders/);
+  assert.match(contentSource, /chooseFolder\(savedFolderIds\(savedPost\), Boolean\(savedPost\)\)/);
+  assert.match(contentSource, /selection\.action === 'delete'/);
   assert.match(contentSource, /function actionSlot\(article\)/);
   assert.match(contentSource, /slot\.after\(wrapper\)/);
   assert.match(styles, /align-self:\s*center/);
-  assert.match(contentSource, /Remove saved post/);
+  assert.match(contentSource, /Edit saved post folders/);
   assert.match(contentSource, /M4 6h16v12H4z/);
   assert.match(contentSource, /nor1c-save-folder-modal-host/);
-  assert.match(contentSource, /Choose a folder for this saved post/);
-  assert.match(contentSource, /class="folder selected"/);
+  assert.match(contentSource, /Choose one or more folders for this saved post/);
+  assert.match(contentSource, /node\.classList\.toggle\('selected', selectedIds\.has\(folder\.id\)\)/);
+  assert.match(contentSource, /const selectedIds = new Set\(initialFolderIds\.filter/);
+  assert.match(contentSource, /payload\.folderIds = selection\.folderIds/);
   assert.match(contentSource, /create-saved-folder/);
   assert.doesNotMatch(contentSource, /<select/);
   assert.match(contentSource, /host\.addEventListener\('keydown',[\s\S]*event\.stopPropagation\(\)/);

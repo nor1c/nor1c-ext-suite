@@ -55,8 +55,9 @@ test('built saved-posts page renders locally stored image and video media', asyn
           media: [
             { slot: 'image-0', kind: 'image', status: 'saved', mediaKey: 'browser-post:image-0', mimeType: 'image/svg+xml', size: image.size, error: '' },
             { slot: 'video-0', kind: 'video', status: 'saved', mediaKey: 'browser-post:video-0', mimeType: 'video/mp4', size: video.size, error: '' }
-          ]
-        }, ...Array.from({ length: 6 }, (_, index) => ({
+          ],
+          folderIds: ['folder-a']
+        }, ...Array.from({ length: 35 }, (_, index) => ({
           id: `text-post-${index}`,
           url: `https://x.com/noric/status/${200 + index}`,
           author: `Text author ${index}`,
@@ -64,20 +65,30 @@ test('built saved-posts page renders locally stored image and video media', asyn
           savedAt: Date.now(),
           status: 'complete',
           error: '',
-          media: []
-        }))]
+          media: [],
+          folderIds: index < 3 ? ['folder-a'] : []
+        }))],
+        savedXFolders: [{ id: 'folder-a', name: 'Folder A' }]
       });
     });
 
     await page.waitForSelector('.post .media-item img');
     await page.waitForSelector('.post .media-item video');
-    await page.waitForSelector('#posts-list .post:nth-child(7)');
+    await page.waitForSelector('#posts-list .post:nth-child(30)');
     const rendered = await page.evaluate(() => ({
       text: document.querySelector('.post-text')?.textContent,
       imageSrc: document.querySelector('.media-item img')?.src,
       videoSrc: document.querySelector('.media-item video')?.src,
       videoControls: document.querySelector('.media-item video')?.controls,
       emptyHidden: document.getElementById('empty-state').hidden,
+      postCount: document.querySelectorAll('#posts-list .post').length,
+      folderCounts: Array.from(document.querySelectorAll('.folder-chip'), chip => ({ id: chip.dataset.folderId, count: chip.querySelector('.folder-chip-count')?.textContent })),
+      pagination: {
+        hidden: document.getElementById('pagination').hidden,
+        status: document.getElementById('pagination-status').textContent,
+        previousDisabled: document.getElementById('pagination-prev').disabled,
+        nextDisabled: document.getElementById('pagination-next').disabled
+      },
       cardHeights: Array.from(document.querySelectorAll('#posts-list .post'), card => card.getBoundingClientRect().height),
       bodyOverflow: getComputedStyle(document.querySelector('#posts-list .post:nth-child(2) .post-body')).overflow,
       mediaContainedAboveActions: (() => {
@@ -92,6 +103,9 @@ test('built saved-posts page renders locally stored image and video media', asyn
     assert.match(rendered.videoSrc, /^blob:chrome-extension:\/\//);
     assert.equal(rendered.videoControls, true);
     assert.equal(rendered.emptyHidden, true);
+    assert.equal(rendered.postCount, 30);
+    assert.deepEqual(rendered.folderCounts, [{ id: '', count: '36' }, { id: 'folder-a', count: '4' }]);
+    assert.deepEqual(rendered.pagination, { hidden: false, status: 'Page 1 of 2', previousDisabled: true, nextDisabled: false });
     assert.deepEqual([...new Set(rendered.cardHeights.map(height => Math.round(height)))], [420]);
     assert.equal(rendered.bodyOverflow, 'hidden');
     assert.equal(rendered.mediaContainedAboveActions, true);
@@ -102,6 +116,16 @@ test('built saved-posts page renders locally stored image and video media', asyn
     assert.match(viewerOpen.imageSrc, /^blob:chrome-extension:\/\//);
     await page.keyboard.press('Escape');
     assert.equal(await page.$eval('#image-viewer', dialog => dialog.open), false);
+
+    await page.click('#pagination-next');
+    await page.waitForFunction(() => document.querySelectorAll('#posts-list .post').length === 6);
+    const secondPage = await page.evaluate(() => ({
+      postCount: document.querySelectorAll('#posts-list .post').length,
+      status: document.getElementById('pagination-status').textContent,
+      previousDisabled: document.getElementById('pagination-prev').disabled,
+      nextDisabled: document.getElementById('pagination-next').disabled
+    }));
+    assert.deepEqual(secondPage, { postCount: 6, status: 'Page 2 of 2', previousDisabled: false, nextDisabled: true });
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

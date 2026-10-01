@@ -1,12 +1,23 @@
 const STORAGE_KEY = 'savedXPosts';
 const FOLDERS_KEY = 'savedXFolders';
+const POSTS_PER_PAGE = 30;
 let activeFolderId = '';
+let currentPage = 1;
 const mediaUrls = new Set();
 const imageViewer = document.getElementById('image-viewer');
 const imageViewerClose = document.getElementById('image-viewer-close');
 const imageViewerMedia = document.getElementById('image-viewer-media');
 const imageViewerPrev = document.getElementById('image-viewer-prev');
 const imageViewerNext = document.getElementById('image-viewer-next');
+const folderManager = document.getElementById('folder-manager');
+const folderManagerList = document.getElementById('folder-manager-list');
+const folderManagerCancel = document.getElementById('folder-manager-cancel');
+const folderManagerSave = document.getElementById('folder-manager-save');
+const pagination = document.getElementById('pagination');
+const paginationPrev = document.getElementById('pagination-prev');
+const paginationNext = document.getElementById('pagination-next');
+const paginationStatus = document.getElementById('pagination-status');
+let folderManagerPostId = '';
 let viewerItems = [];
 let viewerIndex = -1;
 let zoomScale = 1;
@@ -172,6 +183,58 @@ function iconButton(tag, className, label, path) {
   return node;
 }
 
+function postFolderIds(post) {
+  if (Array.isArray(post.folderIds)) return post.folderIds;
+  return typeof post.folderId === 'string' && post.folderId ? [post.folderId] : [];
+}
+
+async function openFolderManager(post) {
+  const result = await chrome.storage.local.get({ [FOLDERS_KEY]: [] });
+  const folders = Array.isArray(result[FOLDERS_KEY]) ? result[FOLDERS_KEY] : [];
+  const selected = new Set(postFolderIds(post));
+  folderManagerPostId = post.id;
+  folderManagerList.replaceChildren();
+  if (!folders.length) folderManagerList.appendChild(element('p', 'empty-state', 'Create a folder first.'));
+  for (const folder of folders) {
+    const option = element('label', 'folder-option');
+    const checkbox = element('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = folder.id;
+    checkbox.checked = selected.has(folder.id);
+    option.append(checkbox, element('span', '', folder.name));
+    folderManagerList.appendChild(option);
+  }
+  folderManager.showModal();
+}
+
+folderManagerCancel.addEventListener('click', () => folderManager.close());
+folderManagerSave.addEventListener('click', async () => {
+  if (!folderManagerPostId) return;
+  folderManagerSave.disabled = true;
+  const folderIds = Array.from(folderManagerList.querySelectorAll('input:checked'), input => input.value);
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'update-saved-post-folders', id: folderManagerPostId, folderIds });
+    if (!result?.success) throw new Error(result?.error || 'Could not update post folders.');
+    folderManager.close();
+    await renderPosts();
+  } catch (cause) {
+    document.getElementById('page-error').textContent = cause instanceof Error ? cause.message : 'Could not update post folders.';
+  } finally {
+    folderManagerSave.disabled = false;
+  }
+});
+folderManager.addEventListener('close', () => { folderManagerPostId = ''; });
+
+function renderPagination(totalItems) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / POSTS_PER_PAGE));
+  currentPage = Math.min(Math.max(1, currentPage), totalPages);
+  pagination.hidden = totalPages <= 1;
+  paginationStatus.textContent = `Page ${currentPage} of ${totalPages}`;
+  paginationPrev.disabled = currentPage === 1;
+  paginationNext.disabled = currentPage === totalPages;
+  return { start: (currentPage - 1) * POSTS_PER_PAGE, end: currentPage * POSTS_PER_PAGE };
+}
+
 async function renderPosts() {
   const list = document.getElementById('posts-list');
   const empty = document.getElementById('empty-state');
@@ -185,31 +248,44 @@ async function renderPosts() {
     const result = await chrome.storage.local.get({ [STORAGE_KEY]: [], [FOLDERS_KEY]: [] });
     const posts = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
     const folders = Array.isArray(result[FOLDERS_KEY]) ? result[FOLDERS_KEY] : [];
-    renderFolders(folders);
-    const visiblePosts = activeFolderId ? posts.filter(post => post.folderId === activeFolderId) : posts;
+    renderFolders(folders, posts);
+    const visiblePosts = activeFolderId ? posts.filter(post => postFolderIds(post).includes(activeFolderId)) : posts;
+    const pageRange = renderPagination(visiblePosts.length);
     empty.hidden = visiblePosts.length !== 0;
 
-    for (const post of visiblePosts) {
+    for (const post of visiblePosts.slice(pageRange.start, pageRange.end)) {
       list.appendChild(await createPost(post));
     }
   } catch (cause) {
     empty.hidden = true;
+    pagination.hidden = true;
     error.textContent = cause instanceof Error ? cause.message : 'Could not load saved posts.';
   }
 }
 
-function renderFolders(folders) {
+function renderFolders(folders, posts) {
   const bar = document.getElementById('folders-bar');
   bar.querySelectorAll('.folder-chip:not([data-folder-id=""])').forEach(node => node.remove());
+  const folderCounts = new Map(folders.map(folder => [folder.id, 0]));
+  for (const post of posts) {
+    for (const folderId of postFolderIds(post)) {
+      if (folderCounts.has(folderId)) folderCounts.set(folderId, folderCounts.get(folderId) + 1);
+    }
+  }
   for (const folder of folders) {
-    const chip = element('button', 'folder-chip', folder.name);
+    const chip = element('button', 'folder-chip');
     chip.type = 'button';
     chip.dataset.folderId = folder.id;
+    chip.title = `${folder.name} (${folderCounts.get(folder.id) || 0})`;
+    chip.append(element('span', 'folder-chip-name', folder.name), element('span', 'folder-chip-count', String(folderCounts.get(folder.id) || 0)));
     chip.classList.toggle('is-active', folder.id === activeFolderId);
-    chip.addEventListener('click', () => { activeFolderId = folder.id; renderPosts(); });
+    chip.addEventListener('click', () => { activeFolderId = folder.id; currentPage = 1; renderPosts(); });
     bar.insertBefore(chip, document.getElementById('new-folder-btn'));
   }
   const allPosts = bar.querySelector('[data-folder-id=""]');
+  const allCount = allPosts?.querySelector('.folder-chip-count');
+  if (allCount) allCount.textContent = String(posts.length);
+  if (allPosts) allPosts.title = `All posts (${posts.length})`;
   allPosts?.classList.toggle('is-active', !activeFolderId);
   allPosts?.removeEventListener('click', selectAllPosts);
   allPosts?.addEventListener('click', selectAllPosts);
@@ -217,6 +293,7 @@ function renderFolders(folders) {
 
 function selectAllPosts() {
   activeFolderId = '';
+  currentPage = 1;
   renderPosts();
 }
 
@@ -294,36 +371,48 @@ async function createPost(post) {
   }
   card.appendChild(body);
 
+  const folders = iconButton('button', 'folder-button', 'Organize post folders', 'M3 6h7l2 2h9v10H3zM7 12h10M12 9v6');
+  folders.type = 'button';
+  folders.addEventListener('click', () => openFolderManager(post));
+  actions.appendChild(folders);
+
   const link = iconButton('a', 'post-link', 'Open original post on X', 'M18.3 5.7 8.2 15.8M9 6h9v9M5 8v11h11');
   link.href = post.url;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   actions.appendChild(link);
 
-  const remove = iconButton('button', 'delete-button', 'Remove saved post', 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
+  const removeLabel = activeFolderId ? 'Remove post from this folder' : 'Remove saved post';
+  const remove = iconButton('button', 'delete-button', removeLabel, 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
   remove.type = 'button';
-  remove.addEventListener('click', () => removePost(post.id, card));
+  remove.addEventListener('click', () => removePost(post, card, activeFolderId));
   actions.appendChild(remove);
   card.appendChild(actions);
   return card;
 }
 
-async function removePost(id, card) {
+async function removePost(post, card, folderId) {
   const button = card.querySelector('.delete-button');
+  const removingFromFolder = Boolean(folderId);
+  const idleLabel = removingFromFolder ? 'Remove post from this folder' : 'Remove saved post';
+  const pendingLabel = removingFromFolder ? 'Removing post from folder…' : 'Removing saved post…';
   button.disabled = true;
-  button.setAttribute('aria-label', 'Removing saved post…');
-  button.title = 'Removing saved post…';
+  button.setAttribute('aria-label', pendingLabel);
+  button.title = pendingLabel;
   const error = document.getElementById('page-error');
   error.textContent = '';
   try {
-    const result = await chrome.runtime.sendMessage({ type: 'delete-x-post', id });
-    if (!result?.success) throw new Error(result?.error || 'Could not remove saved post.');
+    const message = removingFromFolder
+      ? { type: 'update-saved-post-folders', id: post.id, folderIds: postFolderIds(post).filter(id => id !== folderId) }
+      : { type: 'delete-x-post', id: post.id };
+    const result = await chrome.runtime.sendMessage(message);
+    if (!result?.success) throw new Error(result?.error || (removingFromFolder ? 'Could not remove post from this folder.' : 'Could not remove saved post.'));
     await renderPosts();
   } catch (cause) {
     button.disabled = false;
-    button.setAttribute('aria-label', 'Remove saved post');
-    button.title = 'Remove saved post';
-    error.textContent = cause instanceof Error ? cause.message : 'Could not remove saved post.';
+    button.setAttribute('aria-label', idleLabel);
+    button.title = idleLabel;
+    error.textContent = cause instanceof Error ? cause.message : removingFromFolder ? 'Could not remove post from this folder.' : 'Could not remove saved post.';
   }
 }
 
@@ -335,8 +424,19 @@ document.getElementById('new-folder-btn').addEventListener('click', async () => 
   else renderPosts();
 });
 document.getElementById('refresh-btn').addEventListener('click', renderPosts);
+paginationPrev.addEventListener('click', () => {
+  if (currentPage <= 1) return;
+  currentPage -= 1;
+  renderPosts();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+paginationNext.addEventListener('click', () => {
+  currentPage += 1;
+  renderPosts();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes[STORAGE_KEY]) renderPosts();
+  if (area === 'local' && (changes[STORAGE_KEY] || changes[FOLDERS_KEY])) renderPosts();
 });
 window.addEventListener('beforeunload', clearMediaUrls);
 renderPosts();
