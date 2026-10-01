@@ -56,25 +56,45 @@ test('built saved-posts page renders locally stored image and video media', asyn
             { slot: 'image-0', kind: 'image', status: 'saved', mediaKey: 'browser-post:image-0', mimeType: 'image/svg+xml', size: image.size, error: '' },
             { slot: 'video-0', kind: 'video', status: 'saved', mediaKey: 'browser-post:video-0', mimeType: 'video/mp4', size: video.size, error: '' }
           ]
-        }]
+        }, ...Array.from({ length: 6 }, (_, index) => ({
+          id: `text-post-${index}`,
+          url: `https://x.com/noric/status/${200 + index}`,
+          author: `Text author ${index}`,
+          text: index === 0 ? 'A much longer saved post. '.repeat(12) : `Short post ${index}`,
+          savedAt: Date.now(),
+          status: 'complete',
+          error: '',
+          media: []
+        }))]
       });
     });
 
     await page.waitForSelector('.post .media-item img');
     await page.waitForSelector('.post .media-item video');
+    await page.waitForSelector('#posts-list .post:nth-child(7)');
     const rendered = await page.evaluate(() => ({
       text: document.querySelector('.post-text')?.textContent,
       imageSrc: document.querySelector('.media-item img')?.src,
       videoSrc: document.querySelector('.media-item video')?.src,
       videoControls: document.querySelector('.media-item video')?.controls,
-      emptyHidden: document.getElementById('empty-state').hidden
+      emptyHidden: document.getElementById('empty-state').hidden,
+      cardHeights: Array.from(document.querySelectorAll('#posts-list .post'), card => card.getBoundingClientRect().height),
+      bodyOverflow: getComputedStyle(document.querySelector('#posts-list .post:nth-child(2) .post-body')).overflow,
+      mediaContainedAboveActions: (() => {
+        const media = document.querySelector('.media-item img');
+        const actions = media.closest('.post').querySelector('.post-actions');
+        return media.getBoundingClientRect().bottom <= actions.getBoundingClientRect().top;
+      })()
     }));
 
-    assert.equal(rendered.text, 'Saved media test');
+    assert.equal(rendered.text, undefined);
     assert.match(rendered.imageSrc, /^blob:chrome-extension:\/\//);
     assert.match(rendered.videoSrc, /^blob:chrome-extension:\/\//);
     assert.equal(rendered.videoControls, true);
     assert.equal(rendered.emptyHidden, true);
+    assert.deepEqual([...new Set(rendered.cardHeights.map(height => Math.round(height)))], [420]);
+    assert.equal(rendered.bodyOverflow, 'hidden');
+    assert.equal(rendered.mediaContainedAboveActions, true);
 
     await page.click('.media-item img');
     const viewerOpen = await page.$eval('#image-viewer', dialog => ({ open: dialog.open, imageSrc: dialog.querySelector('img').src }));

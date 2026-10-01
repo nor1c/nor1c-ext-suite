@@ -240,10 +240,24 @@ test('saved posts page uses a responsive grid for compact browsing', () => {
   assert.match(styles, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
 });
 
+test('saved posts grid uses a fixed card height independent of content length', () => {
+  const styles = fs.readFileSync(path.join(root, 'src', 'saved-posts.css'), 'utf8');
+  const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+  assert.match(styles, /\.posts-list\s*\{[^}]*grid-auto-rows:\s*420px/);
+  assert.match(styles, /\.post\s*\{[^}]*height:\s*420px[^}]*overflow:\s*hidden/);
+  assert.match(styles, /\.post-body\s*\{[^}]*position:\s*relative[^}]*flex:\s*1 1 0[^}]*overflow:\s*hidden/);
+  assert.doesNotMatch(styles, /\.post-body\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.post-actions\s*\{[^}]*flex:\s*0 0 auto/);
+  assert.match(gallerySource, /const body = element\('div', 'post-body'\)/);
+  assert.match(gallerySource, /body\.appendChild\(grid\)/);
+});
+
 test('saved posts gallery displays media from extension object URLs', () => {
   const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'saved-posts.css'), 'utf8');
   assert.match(gallerySource, /Nor1cSavedPosts\.getMedia\(item\.mediaKey\)/);
   assert.match(gallerySource, /item\.kind === 'video' \? element\('video'\) : element\('img'\)/);
+  assert.match(gallerySource, /`media-grid media-count-\$\{Math\.min\(mediaItems\.length, 4\)\}`/);
   assert.match(gallerySource, /content\.controls = true/);
   assert.match(gallerySource, /URL\.createObjectURL\(blob\)/);
   assert.match(gallerySource, /imageViewer\.showModal\(\)/);
@@ -253,10 +267,14 @@ test('saved posts gallery displays media from extension object URLs', () => {
   assert.match(gallerySource, /ArrowRight/);
   assert.match(gallerySource, /document\.querySelectorAll\('#posts-list \.post'\)/);
   assert.match(gallerySource, /viewerItems = postCards\.flatMap/);
-  assert.match(gallerySource, /if \(post\.text\) card\.appendChild\(element\('p', 'post-text', post\.text\)\)/);
+  assert.doesNotMatch(gallerySource, /element\('p', 'post-text', post\.text\)/);
   assert.match(gallerySource, /actions\.appendChild\(retry\)/);
   assert.match(gallerySource, /actions\.appendChild\(link\)/);
   assert.match(gallerySource, /actions\.appendChild\(remove\)/);
+  assert.match(styles, /\.media-grid\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/);
+  assert.match(styles, /\.media-item img, \.media-item video\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*width:\s*100%[^}]*height:\s*100%[^}]*object-fit:\s*contain/);
+  assert.match(styles, /\.media-item img\s*\{[^}]*image-orientation:\s*from-image/);
+  assert.doesNotMatch(styles, /\.media-item img, \.media-item video\s*\{[^}]*aspect-ratio/);
 });
 
 test('X save button supports compact icon states and removal messages', () => {

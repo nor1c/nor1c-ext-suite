@@ -229,10 +229,11 @@ async function createPost(post) {
   header.appendChild(author);
 
   card.appendChild(header);
+  const body = element('div', 'post-body');
 
   const mediaItems = post.media || [];
   if (mediaItems.length) {
-    const grid = element('div', 'media-grid');
+    const grid = element('div', `media-grid media-count-${Math.min(mediaItems.length, 4)}`);
     for (const item of mediaItems) {
       const frame = element('div', 'media-item');
       if (item.status !== 'saved' || !item.mediaKey) {
@@ -279,20 +280,19 @@ async function createPost(post) {
       }
       grid.appendChild(frame);
     }
-    card.appendChild(grid);
+    body.appendChild(grid);
   }
-
-  if (post.text) card.appendChild(element('p', 'post-text', post.text));
 
   const failed = mediaItems.filter(item => item.status !== 'saved');
   const actions = element('div', 'post-actions');
   if (post.status !== 'complete' || failed.length) {
-    card.appendChild(element('p', 'post-status', post.error || 'Some media could not be saved.'));
+    body.appendChild(element('p', 'post-status', post.error || 'Some media could not be saved.'));
     const retry = iconButton('button', 'retry-link', 'Open post to retry', 'M20 11a8 8 0 1 0 2 5.3M20 5v6h-6');
     retry.type = 'button';
     retry.addEventListener('click', () => chrome.tabs.create({ url: post.url }));
     actions.appendChild(retry);
   }
+  card.appendChild(body);
 
   const link = iconButton('a', 'post-link', 'Open original post on X', 'M18.3 5.7 8.2 15.8M9 6h9v9M5 8v11h11');
   link.href = post.url;
