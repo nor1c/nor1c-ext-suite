@@ -3,6 +3,9 @@ let downloaderLoadPromise = null;
 const downloaderFrames = new Set();
 const playingVideosByTab = new Map();
 const detectedVideoSourcesByTab = new Map();
+const xVideoSourcesByTab = new Map();
+self.__nor1cDetectedVideoSourcesByTab = detectedVideoSourcesByTab;
+self.__nor1cXVideoSourcesByTab = xVideoSourcesByTab;
 const activePlaybackByTab = new Map();
 const MAX_VIDEO_SOURCES_PER_TAB = 100;
 self.__nor1cVideoDownloadEnabled = true;
@@ -64,21 +67,49 @@ function persistVideoSources(tabId, sources) {
   }
 }
 
+function isXMediaPage(details) {
+  const pageUrl = details.initiator || details.documentUrl || '';
+  return /^https?:\/\/(?:[^/]+\.)?(?:x\.com|twitter\.com)(?:\/|$)/i.test(pageUrl);
+}
+
+function xMediaId(value) {
+  try {
+    return new URL(value).pathname.match(/\/(?:amplify_video|ext_tw_video|tweet_video)(?:_thumb)?\/(\d+)(?:\/|$)/i)?.[1] || '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function rememberVideoSource(details) {
-  if (!videoDownloadEnabled || details.tabId < 0 || !isLikelyVideoSource(details)) return;
-  if (!activePlaybackByTab.has(details.tabId)) return;
+  const onX = isXMediaPage(details);
+  if ((!videoDownloadEnabled && !onX) || details.tabId < 0 || !isLikelyVideoSource(details)) return;
   const requestUrl = normalizedVideoUrl(details.url);
   const url = fullVideoUrl(requestUrl);
-  const sources = detectedVideoSourcesByTab.get(details.tabId) || new Map();
-  const previous = sources.get(url);
-  sources.delete(url);
-  sources.set(url, {
+  const source = {
     url,
     requestUrl,
     isPartial: url !== requestUrl,
     type: details.type || '',
     frameId: details.frameId,
     detectedAt: Date.now(),
+    mediaId: xMediaId(url),
+    contentType: '',
+    contentLength: 0,
+    filename: ''
+  };
+  if (onX) {
+    const xSources = xVideoSourcesByTab.get(details.tabId) || new Map();
+    xSources.delete(url);
+    xSources.set(url, source);
+    while (xSources.size > MAX_VIDEO_SOURCES_PER_TAB) xSources.delete(xSources.keys().next().value);
+    xVideoSourcesByTab.set(details.tabId, xSources);
+  }
+  if (!activePlaybackByTab.has(details.tabId)) return;
+  const sources = detectedVideoSourcesByTab.get(details.tabId) || new Map();
+  const previous = sources.get(url);
+  sources.delete(url);
+  sources.set(url, {
+    ...source,
     contentType: (previous && previous.contentType) || '',
     contentLength: (previous && previous.contentLength) || 0,
     filename: (previous && previous.filename) || ''
@@ -105,21 +136,27 @@ function resetVideoSources(tabId) {
 
 function rememberVideoResponse(details) {
   if (details.tabId < 0) return;
-  const sources = detectedVideoSourcesByTab.get(details.tabId);
-  const source = sources && sources.get(fullVideoUrl(details.url));
-  if (!source) return;
-  for (const header of details.responseHeaders || []) {
-    const name = String(header.name || '').toLowerCase();
-    if (name === 'content-type') source.contentType = String(header.value || '').split(';')[0].trim().toLowerCase();
-    if (name === 'content-length') source.contentLength = Number(header.value) || 0;
-    if (name === 'content-disposition') {
-      const value = String(header.value || '');
-      const utf8 = value.match(/filename\*=UTF-8''([^;]+)/i);
-      const plain = value.match(/filename="?([^";]+)"?/i);
-      try { source.filename = decodeURIComponent((utf8 && utf8[1]) || (plain && plain[1]) || ''); } catch (_) {}
+  const key = fullVideoUrl(details.url);
+  const detectedSources = detectedVideoSourcesByTab.get(details.tabId);
+  const xSources = xVideoSourcesByTab.get(details.tabId);
+  const sources = [detectedSources, xSources].filter(Boolean);
+  if (!sources.some(sourceMap => sourceMap.has(key))) return;
+  for (const sourceMap of sources) {
+    const source = sourceMap.get(key);
+    if (!source) continue;
+    for (const header of details.responseHeaders || []) {
+      const name = String(header.name || '').toLowerCase();
+      if (name === 'content-type') source.contentType = String(header.value || '').split(';')[0].trim().toLowerCase();
+      if (name === 'content-length') source.contentLength = Number(header.value) || 0;
+      if (name === 'content-disposition') {
+        const value = String(header.value || '');
+        const utf8 = value.match(/filename\*=UTF-8''([^;]+)/i);
+        const plain = value.match(/filename="?([^";]+)"?/i);
+        try { source.filename = decodeURIComponent((utf8 && utf8[1]) || (plain && plain[1]) || ''); } catch (_) {}
+      }
     }
   }
-  persistVideoSources(details.tabId, sources);
+  if (detectedSources) persistVideoSources(details.tabId, detectedSources);
 }
 
 if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {
@@ -135,7 +172,7 @@ const originalWebRequestAddListener = chrome.webRequest && chrome.webRequest.onB
 if (originalWebRequestAddListener) {
   chrome.webRequest.onBeforeRequest.addListener = function(listener, filter, extraInfoSpec) {
     return originalWebRequestAddListener.call(this, details => {
-      if (videoDownloadEnabled) return listener(details);
+      if (videoDownloadEnabled || (listener === rememberVideoSource && isXMediaPage(details))) return listener(details);
     }, filter, extraInfoSpec);
   };
 }
@@ -328,6 +365,7 @@ function clearDownloaderFrames(tabId) {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete badgeCounts[tabId];
+  xVideoSourcesByTab.delete(tabId);
   playingVideosByTab.delete(tabId);
   detectedVideoSourcesByTab.delete(tabId);
   activePlaybackByTab.delete(tabId);
@@ -338,6 +376,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'loading' || changeInfo.url) {
     badgeCounts[tabId] = {};
+    xVideoSourcesByTab.delete(tabId);
     playingVideosByTab.delete(tabId);
     detectedVideoSourcesByTab.delete(tabId);
     activePlaybackByTab.delete(tabId);

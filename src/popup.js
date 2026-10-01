@@ -733,6 +733,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   })
 
+  document.getElementById('saved-posts-open-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('saved-posts.html') });
+  });
+
   // Website Blocker toggle & panel opener
   document.getElementById('website-blocker-panel-btn').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('website-blocker-panel.html') });

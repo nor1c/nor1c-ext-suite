@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.nor1c-save-x-post-wrapper, .nor1c-save-x-post, .nor1c-save-folder-select {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.nor1c-save-x-post-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+.nor1c-save-x-post {
+  display: inline-flex;
+  width: auto;
+  height: 34px;
+  min-height: 34px;
+  min-width: 64px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: #536471;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.nor1c-save-x-post svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nor1c-save-x-post span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+}
+
+.nor1c-save-folder-select {
+  max-width: 140px;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0 24px 0 8px;
+  border: 1px solid #cfd9de;
+  border-radius: 9999px;
+  background: #fff;
+  color: #0f1419;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.2;
+  outline: none;
+}
+
+.nor1c-save-folder-select:focus {
+  border-color: #1d9bf0;
+  box-shadow: 0 0 0 2px rgba(29, 155, 240, .18);
+}
+
+.nor1c-save-x-post:hover {
+  background: rgba(29, 155, 240, 0.12);
+  color: #1d9bf0;
+}
+
+.nor1c-save-x-post[data-state="saved"] {
+  background: rgba(0, 186, 124, 0.12);
+  color: #00ba7c;
+}
+
+.nor1c-save-x-post[data-state="partial"] {
+  color: #b45309;
+}
+
+.nor1c-save-x-post:focus-visible {
+  outline: 2px solid #1d9bf0;
+  outline-offset: 2px;
+}
+
+.nor1c-save-x-post:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}

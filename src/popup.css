@@ -90,6 +90,20 @@ button {
   text-overflow: ellipsis;
 }
 
+.saved-posts-shortcut {
+  position: sticky;
+  top: 52px;
+  z-index: 4;
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(36, 80, 212, .14);
+}
+.saved-posts-shortcut .group-body { background: var(--surface); }
+.saved-posts-shortcut .toggle-card { justify-content: center; min-height: 48px; padding: 6px; }
+.saved-posts-shortcut .row-icon { color: var(--accent); }
+.saved-posts-shortcut-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.saved-posts-shortcut-btn:hover { background: var(--accent); color: #fff; }
+.saved-posts-shortcut-btn svg { width: 20px; height: 20px; }
+
 /* ---------- Layout ---------- */
 .toggle-list {
   display: flex;

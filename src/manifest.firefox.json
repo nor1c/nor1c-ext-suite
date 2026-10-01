@@ -27,7 +27,9 @@
   ],
   "background": {
     "scripts": [
-      "background.js"
+      "lib/saved-posts-store.js",
+      "background.js",
+      "background-saved-posts.js"
     ]
   },
   "browser_specific_settings": {
@@ -46,6 +48,22 @@
     }
   },
   "content_scripts": [
+    {
+      "matches": [
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*"
+      ],
+      "js": [
+        "content/x-saved-posts.js"
+      ],
+      "css": [
+        "content/x-saved-posts.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
     {
       "matches": [
         "*://*.tiktok.com/*"
