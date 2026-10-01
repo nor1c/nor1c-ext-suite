@@ -313,16 +313,25 @@ async function createPost(post) {
     const grid = element('div', `media-grid media-count-${Math.min(mediaItems.length, 4)}`);
     for (const item of mediaItems) {
       const frame = element('div', 'media-item');
-      if (item.status !== 'saved' || !item.mediaKey) {
-        frame.appendChild(element('p', 'media-error', item.error || 'Media was not saved.'));
+      const sourceUrl = typeof item.url === 'string' ? Nor1cSavedPosts.normalizeMediaUrl(item.url, item.kind) : null;
+      const legacyMedia = !sourceUrl && item.mediaKey && item.status === 'saved';
+      if (!sourceUrl && !legacyMedia) {
+        frame.appendChild(element('p', 'media-error', item.error || 'Media link is unavailable. Open the original post to view it.'));
       } else {
         try {
-          const blob = await Nor1cSavedPosts.getMedia(item.mediaKey);
-          if (!blob || !blob.size) throw new Error('Saved media is missing.');
-          const url = URL.createObjectURL(blob);
-          mediaUrls.add(url);
+          let url = sourceUrl;
+          if (!url && legacyMedia) {
+            const blob = await Nor1cSavedPosts.getMedia(item.mediaKey);
+            if (!blob || !blob.size) throw new Error('Saved media is missing.');
+            url = URL.createObjectURL(blob);
+            mediaUrls.add(url);
+          }
           const content = item.kind === 'video' ? element('video') : element('img');
           content.src = url;
+          content.dataset.sourceUrl = url;
+          content.addEventListener('error', () => {
+            frame.replaceChildren(element('p', 'media-error', 'Media could not be loaded. Open the original post to refresh the link.'));
+          }, { once: true });
           if (item.kind === 'video') {
             content.controls = true;
             content.preload = 'metadata';
@@ -360,9 +369,9 @@ async function createPost(post) {
     body.appendChild(grid);
   }
 
-  const failed = mediaItems.filter(item => item.status !== 'saved');
+  const failed = mediaItems.filter(item => item.status === 'unavailable');
   const actions = element('div', 'post-actions');
-  if (post.status !== 'complete' || failed.length) {
+  if (failed.length) {
     body.appendChild(element('p', 'post-status', post.error || 'Some media could not be saved.'));
     const retry = iconButton('button', 'retry-link', 'Open post to retry', 'M20 11a8 8 0 1 0 2 5.3M20 5v6h-6');
     retry.type = 'button';

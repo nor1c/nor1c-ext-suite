@@ -100,7 +100,7 @@
   function setButtonState(button, state, message) {
     button.dataset.state = state;
     button.disabled = state === 'saving';
-    const labels = { saved: 'Edit saved post folders', saving: 'Saving post…', partial: 'Retry saving media', idle: 'Save post' };
+    const labels = { saved: 'Edit saved post folders', saving: 'Saving post…', partial: 'Refresh saved media links', idle: 'Save post' };
     const paths = {
       saved: '<path d="M4 6h16v12H4zM4 14h4l2 3h4l2-3h4"/><path d="m9 11 2 2 4-4"/>',
       saving: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>',
@@ -244,11 +244,11 @@
         if (!response || !response.success) throw new Error(response?.error || 'Could not save this post.');
         if (selection.action === 'delete') {
           savedPosts.delete(post.id);
-          setButtonState(button, 'idle', 'Save post and media to Nor1c Suite');
+          setButtonState(button, 'idle', 'Save post link to Nor1c Suite');
         } else {
           savedPosts.set(post.id, response.post);
           if (response.post.status === 'complete') setButtonState(button, 'saved', 'Edit saved post folders');
-          else setButtonState(button, 'partial', response.post.error || 'Some media could not be saved. Select to retry.');
+          else setButtonState(button, 'partial', response.post.error || 'Some media links are unavailable. Select to refresh.');
         }
       } catch (error) {
         setButtonState(button, savedPost?.status === 'complete' ? 'saved' : retry ? 'partial' : 'idle', error instanceof Error ? error.message : 'Could not save this post.');

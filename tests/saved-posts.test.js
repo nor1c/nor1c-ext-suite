@@ -179,7 +179,7 @@ test('deleting one folder preserves a post other folder assignments', async () =
   assert.deepEqual(harness.postsState.savedXPosts[0].folderIds, [secondFolder.folder.id]);
 });
 
-test('background stores image bytes in extension media storage', async () => {
+test('background stores media source URLs without fetching or saving media bytes', async () => {
   const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const harness = createBackgroundHarness(async url => {
     const response = new Response(imageBytes, {
@@ -199,9 +199,9 @@ test('background stores image bytes in extension media storage', async () => {
 
   assert.equal(result.success, true);
   assert.equal(result.post.status, 'complete');
-  assert.equal(entry.status, 'saved');
-  assert.equal(entry.mimeType, 'image/png');
-  assert.equal(harness.store.media.get(entry.mediaKey).blob.size, imageBytes.length);
+  assert.equal(entry.status, 'linked');
+  assert.equal(entry.url, 'https://pbs.twimg.com/media/photo.png');
+  assert.equal(harness.store.media.size, 0);
 });
 
 test('retrying media keeps existing folder assignments when no new selection is sent', async () => {
@@ -218,34 +218,28 @@ test('retrying media keeps existing folder assignments when no new selection is 
   assert.deepEqual(Array.from(retried.post.folderIds), [folder.folder.id]);
 });
 
-test('background retries failed media and replaces it with a stored copy', async () => {
+test('saving a post stores its media link without network retries', async () => {
   const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  let shouldFail = true;
-  const harness = createBackgroundHarness(async url => {
-    if (shouldFail) throw new Error('temporary network error');
-    const response = new Response(imageBytes, {
-      status: 200,
-      headers: { 'content-type': 'image/png', 'content-length': String(imageBytes.length) }
-    });
-    Object.defineProperty(response, 'url', { value: url });
-    return response;
+  let fetchCount = 0;
+  const harness = createBackgroundHarness(async () => {
+    fetchCount += 1;
+    throw new Error('save should not fetch media');
   });
   const post = {
     id: '345', url: 'https://x.com/noric/status/345', author: 'noric', text: 'Retry image',
     media: [{ kind: 'image', url: 'https://pbs.twimg.com/media/retry.png' }]
   };
 
-  const first = await harness.send({ type: 'save-x-post', post });
-  shouldFail = false;
-  const retry = await harness.send({ type: 'save-x-post', post: { ...post, retry: true } });
+  const result = await harness.send({ type: 'save-x-post', post });
 
-  assert.equal(first.post.status, 'partial');
-  assert.equal(retry.post.status, 'complete');
-  assert.equal(retry.post.media[0].status, 'saved');
-  assert.equal(harness.store.media.size, 1);
+  assert.equal(result.post.status, 'complete');
+  assert.equal(result.post.media[0].status, 'linked');
+  assert.equal(result.post.media[0].url, 'https://pbs.twimg.com/media/retry.png');
+  assert.equal(fetchCount, 0);
+  assert.equal(harness.store.media.size, 0);
 });
 
-test('removing a saved post clears its metadata and local media', async () => {
+test('removing a saved post clears its metadata and any legacy local media', async () => {
   const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const harness = createBackgroundHarness(async url => {
     const response = new Response(imageBytes, {
@@ -260,6 +254,7 @@ test('removing a saved post clears its metadata and local media', async () => {
     media: [{ kind: 'image', url: 'https://pbs.twimg.com/media/remove.png' }]
   };
   const saved = await harness.send({ type: 'save-x-post', post });
+  assert.equal(saved.post.media[0].status, 'linked');
   const removed = await harness.send({ type: 'delete-x-post', id: post.id }, {
     tab: { id: 9, url: 'chrome-extension://test/saved-posts.html' },
     url: 'chrome-extension://test/saved-posts.html'
@@ -327,10 +322,15 @@ test('saved posts grid uses a fixed card height independent of content length', 
   assert.match(gallerySource, /body\.appendChild\(grid\)/);
 });
 
-test('saved posts gallery displays media from extension object URLs', () => {
+test('saved posts gallery loads linked media directly and supports legacy local object URLs', () => {
   const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
   const styles = fs.readFileSync(path.join(root, 'src', 'saved-posts.css'), 'utf8');
+  assert.match(gallerySource, /item\.url === 'string' \? Nor1cSavedPosts\.normalizeMediaUrl\(item\.url, item\.kind\)/);
+  assert.match(gallerySource, /content\.src = url/);
   assert.match(gallerySource, /Nor1cSavedPosts\.getMedia\(item\.mediaKey\)/);
+  assert.match(html, /img-src 'self' blob: https:\/\/pbs\.twimg\.com/);
+  assert.match(html, /media-src 'self' blob: https:\/\/video\.twimg\.com/);
   assert.match(gallerySource, /item\.kind === 'video' \? element\('video'\) : element\('img'\)/);
   assert.match(gallerySource, /`media-grid media-count-\$\{Math\.min\(mediaItems\.length, 4\)\}`/);
   assert.match(gallerySource, /content\.controls = true/);
@@ -380,7 +380,7 @@ test('X save button supports compact icon states and removal messages', () => {
   assert.match(styles, /border-radius:\s*(?:50%|9999px)/);
 });
 
-test('background keeps failed media visible as a partial save and rejects non-X senders', async () => {
+test('background keeps unavailable media links visible and rejects non-X senders', async () => {
   const harness = createBackgroundHarness();
   const post = {
     id: '456', url: 'https://x.com/noric/status/456', author: 'noric', text: 'Image post',
@@ -391,8 +391,8 @@ test('background keeps failed media visible as a partial save and rejects non-X 
   const denied = await harness.send({ type: 'save-x-post', post }, { tab: { id: 2, url: 'https://example.com' }, url: 'https://example.com' });
 
   assert.equal(partial.success, true);
-  assert.equal(partial.post.status, 'partial');
-  assert.equal(partial.post.media[0].status, 'failed');
+  assert.equal(partial.post.status, 'complete');
+  assert.equal(partial.post.media[0].status, 'linked');
   assert.equal(denied.success, false);
   assert.equal(harness.postsState.savedXPosts.length, 1);
 });

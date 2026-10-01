@@ -17,7 +17,7 @@ function browserExecutable() {
   return candidates.find(candidate => candidate && fs.existsSync(candidate));
 }
 
-test('built saved-posts page renders locally stored image and video media', async () => {
+test('built saved-posts page renders media from stored source URLs', async () => {
   const executablePath = browserExecutable();
   assert.ok(executablePath, 'Chrome or Edge executable is required for extension browser test');
   const browser = await puppeteer.launch({
@@ -34,15 +34,19 @@ test('built saved-posts page renders locally stored image and video media', asyn
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (request.url() === 'https://pbs.twimg.com/media/ext-test.svg') {
+        request.respond({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"></svg>' });
+      } else if (request.url() === 'https://video.twimg.com/ext_test.mp4') {
+        request.respond({ status: 200, contentType: 'video/mp4', body: Buffer.from([0, 0, 0, 20, 102, 116, 121, 112, 105, 115, 111, 109]) });
+      } else {
+        request.continue();
+      }
+    });
     await page.goto(`chrome-extension://${extensionId}/saved-posts.html`);
 
     await page.evaluate(async () => {
-      const image = new Blob([
-        '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>'
-      ], { type: 'image/svg+xml' });
-      const video = new Blob([new Uint8Array([0, 0, 0, 20, 102, 116, 121, 112, 105, 115, 111, 109])], { type: 'video/mp4' });
-      await Nor1cSavedPosts.putMedia('browser-post:image-0', 'browser-post', image);
-      await Nor1cSavedPosts.putMedia('browser-post:video-0', 'browser-post', video);
       await chrome.storage.local.set({
         savedXPosts: [{
           id: 'browser-post',
@@ -53,8 +57,8 @@ test('built saved-posts page renders locally stored image and video media', asyn
           status: 'complete',
           error: '',
           media: [
-            { slot: 'image-0', kind: 'image', status: 'saved', mediaKey: 'browser-post:image-0', mimeType: 'image/svg+xml', size: image.size, error: '' },
-            { slot: 'video-0', kind: 'video', status: 'saved', mediaKey: 'browser-post:video-0', mimeType: 'video/mp4', size: video.size, error: '' }
+            { slot: 'image-0', kind: 'image', status: 'linked', url: 'https://pbs.twimg.com/media/ext-test.svg', error: '' },
+            { slot: 'video-0', kind: 'video', status: 'linked', url: 'https://video.twimg.com/ext_test.mp4', error: '' }
           ],
           folderIds: ['folder-a']
         }, ...Array.from({ length: 35 }, (_, index) => ({
@@ -99,8 +103,8 @@ test('built saved-posts page renders locally stored image and video media', asyn
     }));
 
     assert.equal(rendered.text, undefined);
-    assert.match(rendered.imageSrc, /^blob:chrome-extension:\/\//);
-    assert.match(rendered.videoSrc, /^blob:chrome-extension:\/\//);
+    assert.equal(rendered.imageSrc, 'https://pbs.twimg.com/media/ext-test.svg');
+    assert.equal(rendered.videoSrc, 'https://video.twimg.com/ext_test.mp4');
     assert.equal(rendered.videoControls, true);
     assert.equal(rendered.emptyHidden, true);
     assert.equal(rendered.postCount, 30);
@@ -113,7 +117,7 @@ test('built saved-posts page renders locally stored image and video media', asyn
     await page.click('.media-item img');
     const viewerOpen = await page.$eval('#image-viewer', dialog => ({ open: dialog.open, imageSrc: dialog.querySelector('img').src }));
     assert.equal(viewerOpen.open, true);
-    assert.match(viewerOpen.imageSrc, /^blob:chrome-extension:\/\//);
+    assert.equal(viewerOpen.imageSrc, 'https://pbs.twimg.com/media/ext-test.svg');
     await page.keyboard.press('Escape');
     assert.equal(await page.$eval('#image-viewer', dialog => dialog.open), false);
 
