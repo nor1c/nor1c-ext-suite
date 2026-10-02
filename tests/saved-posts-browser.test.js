@@ -60,7 +60,7 @@ test('built saved-posts page renders media from stored source URLs', async () =>
             { slot: 'image-0', kind: 'image', status: 'linked', url: 'https://pbs.twimg.com/media/ext-test.svg', error: '' },
             { slot: 'video-0', kind: 'video', status: 'linked', url: 'https://video.twimg.com/ext_test.mp4', error: '' }
           ],
-          folderIds: ['folder-a']
+          folderIds: ['folder-a', 'folder-b']
         }, ...Array.from({ length: 35 }, (_, index) => ({
           id: `text-post-${index}`,
           url: `https://x.com/noric/status/${200 + index}`,
@@ -72,7 +72,10 @@ test('built saved-posts page renders media from stored source URLs', async () =>
           media: [],
           folderIds: index < 3 ? ['folder-a'] : []
         }))],
-        savedXFolders: [{ id: 'folder-a', name: 'Folder A' }]
+        savedXFolders: [
+          { id: 'folder-a', name: 'Folder A' },
+          { id: 'folder-b', name: 'Folder B' }
+        ]
       });
     });
 
@@ -87,6 +90,8 @@ test('built saved-posts page renders media from stored source URLs', async () =>
       emptyHidden: document.getElementById('empty-state').hidden,
       postCount: document.querySelectorAll('#posts-list .post').length,
       folderCounts: Array.from(document.querySelectorAll('.folder-chip'), chip => ({ id: chip.dataset.folderId, count: chip.querySelector('.folder-chip-count')?.textContent })),
+      firstPostBadges: Array.from(document.querySelectorAll('#posts-list .post:first-child .post-folder-badge'), badge => badge.textContent),
+      unfiledBadge: document.querySelector('#posts-list .post:nth-child(5) .post-folder-badge')?.textContent,
       pagination: {
         hidden: document.getElementById('pagination').hidden,
         status: document.getElementById('pagination-status').textContent,
@@ -108,7 +113,9 @@ test('built saved-posts page renders media from stored source URLs', async () =>
     assert.equal(rendered.videoControls, true);
     assert.equal(rendered.emptyHidden, true);
     assert.equal(rendered.postCount, 30);
-    assert.deepEqual(rendered.folderCounts, [{ id: '', count: '36' }, { id: 'folder-a', count: '4' }]);
+    assert.deepEqual(rendered.folderCounts, [{ id: '', count: '36' }, { id: 'folder-a', count: '4' }, { id: 'folder-b', count: '1' }]);
+    assert.deepEqual(rendered.firstPostBadges, ['Folder A', 'Folder B']);
+    assert.equal(rendered.unfiledBadge, 'Unfiled');
     assert.deepEqual(rendered.pagination, { hidden: false, status: 'Page 1 of 2', previousDisabled: true, nextDisabled: false });
     assert.deepEqual([...new Set(rendered.cardHeights.map(height => Math.round(height)))], [420]);
     assert.equal(rendered.bodyOverflow, 'hidden');
@@ -130,6 +137,35 @@ test('built saved-posts page renders media from stored source URLs', async () =>
       nextDisabled: document.getElementById('pagination-next').disabled
     }));
     assert.deepEqual(secondPage, { postCount: 6, status: 'Page 2 of 2', previousDisabled: false, nextDisabled: true });
+
+    await page.click('#pagination-prev');
+    await page.waitForFunction(() => document.querySelectorAll('#posts-list .post').length === 30);
+    const deletedId = await page.$eval('#posts-list .post:first-child', card => card.dataset.postId);
+    await page.click('#posts-list .post:first-child .delete-button');
+    const removingState = await page.$eval('#posts-list .post:first-child', card => ({
+      removing: card.classList.contains('post-removing'),
+      count: document.querySelectorAll('#posts-list .post').length
+    }));
+    assert.deepEqual(removingState, { removing: true, count: 30 });
+    await page.waitForFunction(id => {
+      const cards = Array.from(document.querySelectorAll('#posts-list .post'));
+      const ids = cards.map(card => card.dataset.postId);
+      return !ids.includes(id) && ids.length === 30 && new Set(ids).size === ids.length;
+    }, {}, deletedId);
+    const afterDelete = await page.evaluate(() => {
+      const ids = Array.from(document.querySelectorAll('#posts-list .post'), card => card.dataset.postId);
+      return {
+        ids,
+        storedCount: null,
+        folderCount: document.querySelector('[data-folder-id=""] .folder-chip-count')?.textContent
+      };
+    });
+    afterDelete.storedCount = await page.evaluate(async () => (await chrome.storage.local.get({ savedXPosts: [] })).savedXPosts.length);
+    assert.equal(afterDelete.ids.includes(deletedId), false);
+    assert.equal(new Set(afterDelete.ids).size, afterDelete.ids.length);
+    assert.equal(afterDelete.ids.length, 30);
+    assert.equal(afterDelete.storedCount, 35);
+    assert.equal(afterDelete.folderCount, '35');
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

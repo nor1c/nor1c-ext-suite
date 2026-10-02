@@ -7,6 +7,11 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 const storeSource = fs.readFileSync(path.join(root, 'src', 'lib', 'saved-posts-store.js'), 'utf8');
 const backgroundSource = fs.readFileSync(path.join(root, 'src', 'background-saved-posts.js'), 'utf8');
+const savedPostsPageSource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
+const backupValidatorSource = savedPostsPageSource.slice(
+  savedPostsPageSource.indexOf('function validateSavedPostsBackup(payload) {'),
+  savedPostsPageSource.indexOf('async function updateLastBackupLabel()')
+);
 
 function createStore() {
   const media = new Map();
@@ -38,22 +43,42 @@ function createStore() {
 function createBackgroundHarness(fetchImpl = async () => { throw new Error('network unavailable'); }) {
   const store = createStore();
   const postsState = { savedXPosts: [], savedXFolders: [] };
+  const alarms = new Map();
+  const notifications = [];
   let messageListener;
+  let alarmListener;
+  let notificationClickListener;
   const chrome = {
     runtime: {
       onMessage: { addListener(listener) { messageListener = listener; } },
       getURL: file => `chrome-extension://test/${file}`
     },
     storage: {
+      onChanged: { addListener() {} },
       local: {
         async get(defaults) {
           return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, structuredClone(postsState[key] ?? value)]));
         },
         async set(values) {
           for (const [key, value] of Object.entries(values)) postsState[key] = structuredClone(value);
+        },
+        async remove(keys) {
+          for (const key of Array.isArray(keys) ? keys : [keys]) delete postsState[key];
         }
       }
-    }
+    },
+    alarms: {
+      async get(name) { return alarms.get(name); },
+      async clear(name) { return alarms.delete(name); },
+      create(name, options) { alarms.set(name, { name, ...options }); },
+      onAlarm: { addListener(listener) { alarmListener = listener; } }
+    },
+    notifications: {
+      async create(id, options) { notifications.push({ id, options }); return id; },
+      async clear() { return true; },
+      onClicked: { addListener(listener) { notificationClickListener = listener; } }
+    },
+    tabs: { async create() {} }
   };
   const context = {
     chrome, globalThis: null, URL, AbortController, Blob, crypto: require('node:crypto').webcrypto,
@@ -68,12 +93,58 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
 
   function send(message, sender = { tab: { id: 7, url: 'https://x.com/home' }, url: 'https://x.com/home' }) {
     return new Promise(resolve => {
-      const keepOpen = messageListener(message, sender, resolve);
-      if (keepOpen !== true) resolve(undefined);
+      let settled = false;
+      const sendResponse = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      const keepOpen = messageListener(message, sender, sendResponse);
+      if (keepOpen !== true) sendResponse(undefined);
     });
   }
-  return { send, store, postsState };
+  return {
+    send,
+    store,
+    postsState,
+    alarms,
+    notifications,
+    fireAlarm(name) { alarmListener?.({ name }); },
+    clickNotification(id) { notificationClickListener?.(id); }
+  };
 }
+
+test('saved posts page provides local JSON import and export controls', () => {
+  const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
+  assert.match(html, /id="backup-btn"/);
+  assert.match(html, /id="backup-import"/);
+  assert.match(html, /id="backup-export"/);
+  assert.match(html, /id="backup-file"[^>]*accept="application\/json,\.json"/);
+  assert.match(savedPostsPageSource, /validateSavedPostsBackup/);
+  assert.match(savedPostsPageSource, /chrome\.storage\.local\.get\(\{ \[STORAGE_KEY\]: \[\], \[FOLDERS_KEY\]: \[\] \}\)/);
+  assert.match(savedPostsPageSource, /chrome\.storage\.local\.set\(\{ \[STORAGE_KEY\]: restored\.posts, \[FOLDERS_KEY\]: restored\.folders \}\)/);
+  assert.match(savedPostsPageSource, /window\.confirm/);
+  assert.doesNotMatch(`${html}\n${savedPostsPageSource}`, /supabase/i);
+});
+
+test('backup export normalizes legacy posts without media or folderIds arrays', () => {
+  const context = {
+    BACKUP_VERSION: 1,
+    Nor1cSavedPosts: createStore(),
+    payload: {
+      version: 1,
+      folders: [{ id: 'legacy-folder', name: 'Legacy' }],
+      posts: [{ id: '901', url: 'https://x.com/noric/status/901', folderId: 'legacy-folder' }]
+    },
+    result: null
+  };
+  vm.createContext(context);
+  vm.runInContext(`${backupValidatorSource}\nresult = validateSavedPostsBackup(payload);`, context);
+  const result = JSON.parse(JSON.stringify(context.result));
+  assert.deepEqual(result.posts[0].folderIds, ['legacy-folder']);
+  assert.deepEqual(result.posts[0].media, []);
+  assert.equal(result.posts[0].status, 'complete');
+});
 
 test('dedicated image viewer includes previous and next navigation controls', () => {
   const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
@@ -123,6 +194,28 @@ test('saved media URLs are restricted to official HTTPS X media hosts', () => {
   assert.equal(store.normalizeMediaUrl('https://video.twimg.com/ext/clip.mp4', 'video'), 'https://video.twimg.com/ext/clip.mp4');
   assert.equal(store.normalizeMediaUrl('https://evil.example/photo.jpg', 'image'), null);
   assert.equal(store.normalizeMediaUrl('http://pbs.twimg.com/media/photo.jpg', 'image'), null);
+});
+
+test('background schedules a backup reminder every five days', async () => {
+  const harness = createBackgroundHarness();
+  await new Promise(resolve => setImmediate(resolve));
+  const alarm = harness.alarms.get('saved-x-posts-backup-reminder');
+  assert.equal(alarm.periodInMinutes, 5 * 24 * 60);
+  harness.fireAlarm('saved-x-posts-backup-reminder');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.notifications.length, 1);
+  assert.equal(harness.notifications[0].options.title, 'Back up your saved posts');
+});
+
+test('completed exports update the local backup timestamp and reset the reminder', async () => {
+  const harness = createBackgroundHarness();
+  const result = await harness.send({ type: 'saved-posts-backup-completed' }, {
+    tab: { id: 9, url: 'chrome-extension://test/saved-posts.html' },
+    url: 'chrome-extension://test/saved-posts.html'
+  });
+  assert.equal(result.success, true);
+  assert.equal(harness.postsState.savedXPostsLastBackupAt, result.completedAt);
+  assert.ok(harness.alarms.get('saved-x-posts-backup-reminder').when > result.completedAt);
 });
 
 test('X page can create a saved folder for the save modal', async () => {
@@ -287,6 +380,16 @@ test('saved posts folder filters and per-post organizer support multiple folders
   assert.match(html, /id="folder-manager"/);
 });
 
+test('each saved post shows badges for all assigned folders', () => {
+  const styles = fs.readFileSync(path.join(root, 'src', 'saved-posts.css'), 'utf8');
+  assert.match(savedPostsPageSource, /const folderNames = new Map\(folders\.map\(folder => \[folder\.id, folder\.name\]\)\)/);
+  assert.match(savedPostsPageSource, /const assignedFolders = \[\.\.\.new Set\(postFolderIds\(post\)\.map\(id => folderNames\.get\(id\)\)\.filter\(Boolean\)\)\]/);
+  assert.match(savedPostsPageSource, /'post-folder-badge', name/);
+  assert.match(savedPostsPageSource, /'post-folder-badge is-unfiled', 'Unfiled'/);
+  assert.match(styles, /\.post-folder-badges\s*\{/);
+  assert.match(styles, /\.post-folder-badge\s*\{/);
+});
+
 test('saved posts folder list shows item counts and paginates 30 posts per page', () => {
   const gallerySource = fs.readFileSync(path.join(root, 'src', 'saved-posts.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'src', 'saved-posts.html'), 'utf8');
@@ -302,6 +405,16 @@ test('saved posts folder list shows item counts and paginates 30 posts per page'
   assert.match(html, /id="pagination-next"/);
   assert.match(styles, /\.folder-chip-count\s*\{/);
   assert.match(styles, /\.pagination\s*\{/);
+});
+
+test('saved posts renders and deletes cards without a blank refresh', () => {
+  assert.match(savedPostsPageSource, /let renderQueue = Promise\.resolve\(\)/);
+  assert.match(savedPostsPageSource, /const result = renderQueue\.then\(renderPostsOnce\)/);
+  assert.match(savedPostsPageSource, /const fragment = document\.createDocumentFragment\(\)/);
+  assert.match(savedPostsPageSource, /list\.replaceChildren\(fragment\)/);
+  assert.match(savedPostsPageSource, /card\.classList\.add\('post-removing'\)/);
+  assert.match(savedPostsPageSource, /if \(localMutationDepth > 0\) return/);
+  assert.match(savedPostsPageSource, /card\.dataset\.postId = String\(post\.id\)/);
 });
 
 test('saved posts page uses a responsive grid for compact browsing', () => {

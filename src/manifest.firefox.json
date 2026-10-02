@@ -12,7 +12,9 @@
     "clipboardWrite",
     "tabs",
     "webRequest",
-    "webNavigation"
+    "webNavigation",
+    "alarms",
+    "notifications"
   ],
   "commands": {
     "switch-tab": {

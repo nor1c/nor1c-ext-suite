@@ -25,11 +25,16 @@
       <header class="page-header">
       <div>
         <h1>Saved Posts</h1>
-        <p>Stored in this browser extension</p>
+        <p>Stored locally in this browser</p>
       </div>
-      <button id="refresh-btn" class="icon-button" type="button" title="Refresh saved posts" aria-label="Refresh saved posts">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 5a7 7 0 0 0 11.7-2"/></svg>
-      </button>
+      <div class="header-actions">
+        <button id="backup-btn" class="icon-button" type="button" title="Backup saved posts" aria-label="Backup saved posts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v6h8V3M8 15h8v6"/></svg>
+        </button>
+        <button id="refresh-btn" class="icon-button" type="button" title="Refresh saved posts" aria-label="Refresh saved posts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 5a7 7 0 0 0 11.7-2"/></svg>
+        </button>
+      </div>
     </header>
     <p id="page-error" class="page-error" role="alert"></p>
     <p id="empty-state" class="empty-state" hidden>No saved posts yet.</p>
@@ -41,6 +46,20 @@
       </nav>
     </div>
   </main>
+  <dialog id="backup-dialog" class="folder-manager" aria-labelledby="backup-title">
+    <form id="backup-form" class="folder-manager-panel">
+      <h2 id="backup-title">Backup Saved Posts</h2>
+      <p>Export posts and folders to a JSON file, or restore them from an earlier backup.</p>
+      <p id="backup-last-export" class="backup-last-export">No backup exported yet.</p>
+      <p id="backup-status" class="settings-status" role="status" aria-live="polite"></p>
+      <div class="folder-manager-actions backup-actions-row">
+        <button id="backup-close" class="dialog-button" type="button">Close</button>
+        <button id="backup-import" class="dialog-button" type="button">Import JSON</button>
+        <button id="backup-export" class="dialog-button dialog-button-primary" type="button">Export JSON</button>
+      </div>
+      <input id="backup-file" type="file" accept="application/json,.json" hidden>
+    </form>
+  </dialog>
   <dialog id="folder-manager" class="folder-manager" aria-labelledby="folder-manager-title">
     <form method="dialog" class="folder-manager-panel">
       <h2 id="folder-manager-title">Organize post</h2>

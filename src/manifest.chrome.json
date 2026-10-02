@@ -14,7 +14,9 @@
     "webRequest",
     "declarativeNetRequest",
     "offscreen",
-    "webNavigation"
+    "webNavigation",
+    "alarms",
+    "notifications"
   ],
   "commands": {
     "switch-tab": {

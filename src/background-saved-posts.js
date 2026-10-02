@@ -1,6 +1,10 @@
 (function () {
   const STORAGE_KEY = 'savedXPosts';
   const FOLDERS_KEY = 'savedXFolders';
+  const LAST_BACKUP_KEY = 'savedXPostsLastBackupAt';
+  const BACKUP_ALARM = 'saved-x-posts-backup-reminder';
+  const BACKUP_NOTIFICATION = 'saved-x-posts-backup-reminder';
+  const BACKUP_INTERVAL_MINUTES = 5 * 24 * 60;
   const MAX_POSTS = 500;
   const MAX_FOLDERS = 100;
   const MAX_MEDIA_COUNT = 5;
@@ -22,6 +26,39 @@
     const result = await chrome.storage.local.get({ [FOLDERS_KEY]: [] });
     return Array.isArray(result[FOLDERS_KEY]) ? result[FOLDERS_KEY] : [];
   }
+
+  function scheduleBackupReminder(fromTime = Date.now()) {
+    chrome.alarms.create(BACKUP_ALARM, {
+      when: Math.max(Date.now() + 1000, fromTime + BACKUP_INTERVAL_MINUTES * 60 * 1000),
+      periodInMinutes: BACKUP_INTERVAL_MINUTES
+    });
+  }
+
+  async function ensureBackupReminder() {
+    const existing = await chrome.alarms.get(BACKUP_ALARM);
+    if (existing) return;
+    const result = await chrome.storage.local.get({ [LAST_BACKUP_KEY]: 0 });
+    scheduleBackupReminder(Number(result[LAST_BACKUP_KEY]) || Date.now());
+  }
+
+  ensureBackupReminder().catch(error => console.warn('Could not schedule saved posts backup reminder:', error.message));
+
+  chrome.alarms.onAlarm.addListener(alarm => {
+    if (alarm.name !== BACKUP_ALARM) return;
+    chrome.notifications.create(BACKUP_NOTIFICATION, {
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title: 'Back up your saved posts',
+      message: 'Export a JSON backup of your saved X posts and folders.',
+      priority: 1
+    }).catch(error => console.warn('Could not show saved posts backup reminder:', error.message));
+  });
+
+  chrome.notifications.onClicked.addListener(notificationId => {
+    if (notificationId !== BACKUP_NOTIFICATION) return;
+    chrome.notifications.clear(notificationId).catch(() => {});
+    chrome.tabs.create({ url: chrome.runtime.getURL('saved-posts.html') }).catch(() => {});
+  });
 
   function safeFolderName(value) {
     return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
@@ -214,6 +251,20 @@
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === 'saved-posts-backup-completed') {
+      if (!isExtensionPage(sender)) {
+        sendResponse({ success: false, error: 'This action is only available from the saved posts page.' });
+        return false;
+      }
+      const completedAt = Date.now();
+      chrome.storage.local.set({ [LAST_BACKUP_KEY]: completedAt })
+        .then(() => {
+          scheduleBackupReminder(completedAt);
+          sendResponse({ success: true, completedAt });
+        })
+        .catch(error => sendResponse({ success: false, error: error instanceof Error ? error.message : 'Could not update the backup reminder.' }));
+      return true;
+    }
     if (message?.type === 'save-x-post') {
       serialize(() => savePost(message.post, sender, message.retry === true))
         .then(post => sendResponse({ success: true, post }))

@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'savedXPosts';
 const FOLDERS_KEY = 'savedXFolders';
+const BACKUP_VERSION = 1;
+const LAST_BACKUP_KEY = 'savedXPostsLastBackupAt';
 const POSTS_PER_PAGE = 30;
 let activeFolderId = '';
 let currentPage = 1;
@@ -17,6 +19,10 @@ const pagination = document.getElementById('pagination');
 const paginationPrev = document.getElementById('pagination-prev');
 const paginationNext = document.getElementById('pagination-next');
 const paginationStatus = document.getElementById('pagination-status');
+const backupDialog = document.getElementById('backup-dialog');
+const backupStatus = document.getElementById('backup-status');
+const backupLastExport = document.getElementById('backup-last-export');
+const backupFile = document.getElementById('backup-file');
 let folderManagerPostId = '';
 let viewerItems = [];
 let viewerIndex = -1;
@@ -26,6 +32,8 @@ let panY = 0;
 let dragOrigin = null;
 let dragStart = null;
 let didPan = false;
+let renderQueue = Promise.resolve();
+let localMutationDepth = 0;
 
 function applyImageTransform() {
   const image = imageViewerMedia.querySelector('.viewer-image');
@@ -225,6 +233,120 @@ folderManagerSave.addEventListener('click', async () => {
 });
 folderManager.addEventListener('close', () => { folderManagerPostId = ''; });
 
+function validateSavedPostsBackup(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.version !== BACKUP_VERSION) throw new Error('Invalid or unsupported saved posts backup.');
+  if (!Array.isArray(payload.posts) || !Array.isArray(payload.folders)) throw new Error('Backup must contain posts and folders arrays.');
+  if (payload.posts.length > 500 || payload.folders.length > 100) throw new Error('Backup exceeds the saved posts or folders limit.');
+
+  const folderIds = new Set();
+  const folderNames = new Set();
+  const folders = payload.folders.map(folder => {
+    const id = typeof folder?.id === 'string' ? folder.id : '';
+    const name = typeof folder?.name === 'string' ? folder.name.trim().replace(/\s+/g, ' ') : '';
+    if (!id || id.length > 100 || !name || name.length > 60 || folderIds.has(id) || folderNames.has(name.toLowerCase())) throw new Error('Backup contains an invalid folder.');
+    folderIds.add(id);
+    folderNames.add(name.toLowerCase());
+    return { id, name, createdAt: Number.isFinite(Number(folder.createdAt)) ? Number(folder.createdAt) : Date.now() };
+  });
+
+  const postIds = new Set();
+  const posts = payload.posts.map(post => {
+    if (!post || typeof post !== 'object' || Array.isArray(post)) throw new Error('Backup contains an invalid saved post.');
+    const canonical = Nor1cSavedPosts.canonicalPostUrl(post.url);
+    const mediaInput = post.media == null ? [] : post.media;
+    const folderInput = Array.isArray(post.folderIds)
+      ? post.folderIds
+      : typeof post.folderId === 'string' && post.folderId
+        ? [post.folderId]
+        : post.folderIds == null
+          ? []
+          : post.folderIds;
+    if (!canonical || canonical.id !== String(post.id) || postIds.has(canonical.id) || !Array.isArray(mediaInput) || !Array.isArray(folderInput)) throw new Error('Backup contains an invalid saved post.');
+    if (mediaInput.length > 5 || folderInput.some(id => typeof id !== 'string')) throw new Error('Backup contains an invalid saved post.');
+    postIds.add(canonical.id);
+    const media = mediaInput.map((item, index) => {
+      if (!item || !['image', 'video'].includes(item.kind)) throw new Error('Backup contains invalid media metadata.');
+      const url = item.url ? Nor1cSavedPosts.normalizeMediaUrl(item.url, item.kind) : '';
+      if (item.url && !url) throw new Error('Backup contains an invalid media URL.');
+      const slot = typeof item.slot === 'string' && item.slot ? item.slot.slice(0, 40) : `${item.kind}-${index}`;
+      return url
+        ? { slot, kind: item.kind, status: 'linked', url, hint: '', error: '' }
+        : { slot, kind: item.kind, status: 'unavailable', url: '', hint: '', error: 'Media link is unavailable.' };
+    });
+    const failures = media.filter(item => item.status === 'unavailable').length;
+    return {
+      id: canonical.id,
+      url: canonical.url,
+      text: typeof post.text === 'string' ? post.text.trim().slice(0, 4000) : '',
+      author: typeof post.author === 'string' ? post.author.trim().slice(0, 500) : '',
+      createdAt: typeof post.createdAt === 'string' ? post.createdAt.trim().slice(0, 80) : '',
+      savedAt: Number.isFinite(Number(post.savedAt)) ? Number(post.savedAt) : Date.now(),
+      updatedAt: Number.isFinite(Number(post.updatedAt)) ? Number(post.updatedAt) : Date.now(),
+      folderIds: [...new Set(folderInput.filter(id => folderIds.has(id)))],
+      status: failures ? 'partial' : 'complete',
+      error: failures ? `${failures} media link(s) are unavailable.` : '',
+      media
+    };
+  });
+  return { posts, folders };
+}
+
+async function updateLastBackupLabel() {
+  const result = await chrome.storage.local.get({ [LAST_BACKUP_KEY]: 0 });
+  const timestamp = Number(result[LAST_BACKUP_KEY]) || 0;
+  backupLastExport.textContent = timestamp ? `Last backup: ${new Date(timestamp).toLocaleString()}` : 'No backup exported yet.';
+}
+
+document.getElementById('backup-btn').addEventListener('click', async () => {
+  backupStatus.textContent = '';
+  backupStatus.removeAttribute('data-state');
+  await updateLastBackupLabel();
+  backupDialog.showModal();
+});
+document.getElementById('backup-close').addEventListener('click', () => backupDialog.close());
+document.getElementById('backup-form').addEventListener('submit', event => event.preventDefault());
+document.getElementById('backup-export').addEventListener('click', async () => {
+  const button = document.getElementById('backup-export');
+  button.disabled = true;
+  try {
+    const result = await chrome.storage.local.get({ [STORAGE_KEY]: [], [FOLDERS_KEY]: [] });
+    const payload = validateSavedPostsBackup({ version: BACKUP_VERSION, posts: result[STORAGE_KEY], folders: result[FOLDERS_KEY] });
+    payload.exportedAt = new Date().toISOString();
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const date = new Date().toISOString().slice(0, 10);
+    await chrome.downloads.download({ url, filename: `nor1c-saved-x-posts-${date}.json`, saveAs: true });
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const reminder = await chrome.runtime.sendMessage({ type: 'saved-posts-backup-completed' });
+    if (!reminder?.success) throw new Error(reminder?.error || 'Could not update the backup reminder.');
+    backupStatus.textContent = 'Backup exported successfully.';
+    backupStatus.dataset.state = 'success';
+    await updateLastBackupLabel();
+  } catch (error) {
+    backupStatus.textContent = error instanceof Error ? error.message : 'Backup export failed.';
+    backupStatus.dataset.state = 'error';
+  } finally { button.disabled = false; }
+});
+document.getElementById('backup-import').addEventListener('click', () => backupFile.click());
+backupFile.addEventListener('change', async () => {
+  const file = backupFile.files?.[0];
+  backupFile.value = '';
+  if (!file) return;
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error('Backup file is too large.');
+    const restored = validateSavedPostsBackup(JSON.parse(await file.text()));
+    if (!window.confirm(`Replace local data with ${restored.posts.length} post(s) and ${restored.folders.length} folder(s)?`)) return;
+    await chrome.storage.local.set({ [STORAGE_KEY]: restored.posts, [FOLDERS_KEY]: restored.folders });
+    currentPage = 1;
+    activeFolderId = '';
+    await renderPosts();
+    backupStatus.textContent = 'Backup imported successfully.';
+    backupStatus.dataset.state = 'success';
+  } catch (error) {
+    backupStatus.textContent = error instanceof Error ? error.message : 'Backup import failed.';
+    backupStatus.dataset.state = 'error';
+  }
+});
+
 function renderPagination(totalItems) {
   const totalPages = Math.max(1, Math.ceil(totalItems / POSTS_PER_PAGE));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -235,30 +357,41 @@ function renderPagination(totalItems) {
   return { start: (currentPage - 1) * POSTS_PER_PAGE, end: currentPage * POSTS_PER_PAGE };
 }
 
-async function renderPosts() {
+function renderPosts() {
+  const result = renderQueue.then(renderPostsOnce);
+  renderQueue = result.catch(() => {});
+  return result;
+}
+
+async function renderPostsOnce() {
   const list = document.getElementById('posts-list');
   const empty = document.getElementById('empty-state');
   const error = document.getElementById('page-error');
+  const nextMediaUrls = new Set();
   error.textContent = '';
-  clearMediaUrls();
-  viewerItems = [];
-  list.replaceChildren();
 
   try {
     const result = await chrome.storage.local.get({ [STORAGE_KEY]: [], [FOLDERS_KEY]: [] });
     const posts = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
     const folders = Array.isArray(result[FOLDERS_KEY]) ? result[FOLDERS_KEY] : [];
-    renderFolders(folders, posts);
     const visiblePosts = activeFolderId ? posts.filter(post => postFolderIds(post).includes(activeFolderId)) : posts;
     const pageRange = renderPagination(visiblePosts.length);
-    empty.hidden = visiblePosts.length !== 0;
-
+    const folderNames = new Map(folders.map(folder => [folder.id, folder.name]));
+    const cards = [];
     for (const post of visiblePosts.slice(pageRange.start, pageRange.end)) {
-      list.appendChild(await createPost(post));
+      cards.push(await createPost(post, folderNames, nextMediaUrls));
     }
+
+    const fragment = document.createDocumentFragment();
+    fragment.append(...cards);
+    clearMediaUrls();
+    for (const url of nextMediaUrls) mediaUrls.add(url);
+    viewerItems = [];
+    renderFolders(folders, posts);
+    empty.hidden = visiblePosts.length !== 0;
+    list.replaceChildren(fragment);
   } catch (cause) {
-    empty.hidden = true;
-    pagination.hidden = true;
+    for (const url of nextMediaUrls) URL.revokeObjectURL(url);
     error.textContent = cause instanceof Error ? cause.message : 'Could not load saved posts.';
   }
 }
@@ -297,15 +430,30 @@ function selectAllPosts() {
   renderPosts();
 }
 
-async function createPost(post) {
-  const card = element('article', 'post');
+async function createPost(post, folderNames = new Map(), createdMediaUrls = mediaUrls) {
+  const card = element('article', 'post post-entering');
+  card.dataset.postId = String(post.id);
   const header = element('header', 'post-header');
   const author = element('div', 'post-author', post.author || 'X post');
   const time = element('div', 'post-time', post.savedAt ? `Saved ${new Date(post.savedAt).toLocaleString()}` : '');
   author.appendChild(time);
   header.appendChild(author);
 
-  card.appendChild(header);
+  const assignedFolders = [...new Set(postFolderIds(post).map(id => folderNames.get(id)).filter(Boolean))];
+  const badges = element('div', 'post-folder-badges');
+  badges.setAttribute('aria-label', assignedFolders.length ? `Saved in folders: ${assignedFolders.join(', ')}` : 'Not assigned to a folder');
+  badges.title = assignedFolders.length ? assignedFolders.join(', ') : 'Not assigned to a folder';
+  if (assignedFolders.length) {
+    for (const name of assignedFolders) {
+      const badge = element('span', 'post-folder-badge', name);
+      badge.title = name;
+      badges.appendChild(badge);
+    }
+  } else {
+    badges.appendChild(element('span', 'post-folder-badge is-unfiled', 'Unfiled'));
+  }
+
+  card.append(header, badges);
   const body = element('div', 'post-body');
 
   const mediaItems = post.media || [];
@@ -324,7 +472,7 @@ async function createPost(post) {
             const blob = await Nor1cSavedPosts.getMedia(item.mediaKey);
             if (!blob || !blob.size) throw new Error('Saved media is missing.');
             url = URL.createObjectURL(blob);
-            mediaUrls.add(url);
+            createdMediaUrls.add(url);
           }
           const content = item.kind === 'video' ? element('video') : element('img');
           content.src = url;
@@ -408,20 +556,27 @@ async function removePost(post, card, folderId) {
   button.disabled = true;
   button.setAttribute('aria-label', pendingLabel);
   button.title = pendingLabel;
+  card.classList.add('post-removing');
   const error = document.getElementById('page-error');
   error.textContent = '';
+  localMutationDepth += 1;
   try {
     const message = removingFromFolder
       ? { type: 'update-saved-post-folders', id: post.id, folderIds: postFolderIds(post).filter(id => id !== folderId) }
       : { type: 'delete-x-post', id: post.id };
+    const minimumTransition = new Promise(resolve => setTimeout(resolve, 180));
     const result = await chrome.runtime.sendMessage(message);
+    await minimumTransition;
     if (!result?.success) throw new Error(result?.error || (removingFromFolder ? 'Could not remove post from this folder.' : 'Could not remove saved post.'));
     await renderPosts();
   } catch (cause) {
+    card.classList.remove('post-removing');
     button.disabled = false;
     button.setAttribute('aria-label', idleLabel);
     button.title = idleLabel;
     error.textContent = cause instanceof Error ? cause.message : removingFromFolder ? 'Could not remove post from this folder.' : 'Could not remove saved post.';
+  } finally {
+    localMutationDepth -= 1;
   }
 }
 
@@ -445,7 +600,9 @@ paginationNext.addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes[STORAGE_KEY] || changes[FOLDERS_KEY])) renderPosts();
+  if (area !== 'local' || (!changes[STORAGE_KEY] && !changes[FOLDERS_KEY])) return;
+  if (localMutationDepth > 0) return;
+  renderPosts();
 });
 window.addEventListener('beforeunload', clearMediaUrls);
 renderPosts();
