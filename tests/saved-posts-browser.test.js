@@ -61,6 +61,16 @@ test('built saved-posts page renders media from stored source URLs', async () =>
             { slot: 'video-0', kind: 'video', status: 'linked', url: 'https://video.twimg.com/ext_test.mp4', error: '' }
           ],
           folderIds: ['folder-a', 'folder-b']
+        }, {
+          id: 'pixiv-hidden',
+          platform: 'pixiv',
+          url: 'https://www.pixiv.net/artworks/999',
+          author: 'Hidden Pixiv artist',
+          text: 'Must not appear in the X view',
+          savedAt: Date.now(),
+          status: 'complete',
+          media: [],
+          folderIds: ['pixiv-folder']
         }, ...Array.from({ length: 35 }, (_, index) => ({
           id: `text-post-${index}`,
           url: `https://x.com/noric/status/${200 + index}`,
@@ -73,8 +83,9 @@ test('built saved-posts page renders media from stored source URLs', async () =>
           folderIds: index < 3 ? ['folder-a'] : []
         }))],
         savedXFolders: [
-          { id: 'folder-a', name: 'Folder A' },
-          { id: 'folder-b', name: 'Folder B' }
+          { id: 'folder-a', name: 'Folder A', platform: 'x' },
+          { id: 'folder-b', name: 'Folder B', platform: 'x' },
+          { id: 'pixiv-folder', name: 'Pixiv Folder', platform: 'pixiv' }
         ]
       });
     });
@@ -89,6 +100,7 @@ test('built saved-posts page renders media from stored source URLs', async () =>
       videoControls: document.querySelector('.media-item video')?.controls,
       emptyHidden: document.getElementById('empty-state').hidden,
       postCount: document.querySelectorAll('#posts-list .post').length,
+      containsPixiv: Array.from(document.querySelectorAll('#posts-list .post'), card => card.dataset.postId).includes('pixiv-hidden'),
       folderCounts: Array.from(document.querySelectorAll('.folder-chip'), chip => ({ id: chip.dataset.folderId, count: chip.querySelector('.folder-chip-count')?.textContent })),
       firstPostBadges: Array.from(document.querySelectorAll('#posts-list .post:first-child .post-folder-badge'), badge => badge.textContent),
       unfiledBadge: document.querySelector('#posts-list .post:nth-child(5) .post-folder-badge')?.textContent,
@@ -113,6 +125,7 @@ test('built saved-posts page renders media from stored source URLs', async () =>
     assert.equal(rendered.videoControls, true);
     assert.equal(rendered.emptyHidden, true);
     assert.equal(rendered.postCount, 30);
+    assert.equal(rendered.containsPixiv, false);
     assert.deepEqual(rendered.folderCounts, [{ id: '', count: '36' }, { id: 'folder-a', count: '4' }, { id: 'folder-b', count: '1' }]);
     assert.deepEqual(rendered.firstPostBadges, ['Folder A', 'Folder B']);
     assert.equal(rendered.unfiledBadge, 'Unfiled');
@@ -164,7 +177,7 @@ test('built saved-posts page renders media from stored source URLs', async () =>
     assert.equal(afterDelete.ids.includes(deletedId), false);
     assert.equal(new Set(afterDelete.ids).size, afterDelete.ids.length);
     assert.equal(afterDelete.ids.length, 30);
-    assert.equal(afterDelete.storedCount, 35);
+    assert.equal(afterDelete.storedCount, 36);
     assert.equal(afterDelete.folderCount, '35');
     assert.deepEqual(errors, []);
   } finally {

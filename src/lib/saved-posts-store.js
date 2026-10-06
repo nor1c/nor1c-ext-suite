@@ -89,13 +89,29 @@
     }
   }
 
-  function normalizeMediaUrl(value, kind) {
+  function canonicalPixivPostUrl(value) {
+    try {
+      const url = new URL(value);
+      if (!['pixiv.net', 'www.pixiv.net'].includes(url.hostname.toLowerCase())) return null;
+      const match = url.pathname.match(/^\/(?:[a-z]{2}\/)?artworks\/(\d+)\/?$/i);
+      if (!match) return null;
+      return { id: match[1], url: `https://www.pixiv.net/artworks/${match[1]}` };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function normalizeMediaUrl(value, kind, platform = 'x') {
     try {
       const url = new URL(value);
       if (url.protocol !== 'https:' || url.username || url.password) return null;
       const host = url.hostname.toLowerCase();
-      if (kind === 'image' && host !== 'pbs.twimg.com') return null;
-      if (kind === 'video' && host !== 'video.twimg.com') return null;
+      if (platform === 'pixiv') {
+        if (kind !== 'image' || host !== 'i.pximg.net') return null;
+      } else {
+        if (kind === 'image' && host !== 'pbs.twimg.com') return null;
+        if (kind === 'video' && host !== 'video.twimg.com') return null;
+      }
       url.hash = '';
       return url.href;
     } catch (_) {
@@ -106,6 +122,7 @@
   root.Nor1cSavedPosts = Object.freeze({
     DB_NAME,
     canonicalPostUrl,
+    canonicalPixivPostUrl,
     normalizeMediaUrl,
     putMedia,
     getMedia,

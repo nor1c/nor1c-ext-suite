@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-platform="pixiv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,28 +8,28 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="saved-posts.css">
-  <title>Saved Posts — Nor1c Suite</title>
+  <title>Saved Pixiv Posts — Nor1c Suite</title>
 </head>
 <body>
   <main class="page">
     <aside class="folders-sidebar">
       <nav class="platform-switcher" aria-label="Saved post platform">
-        <a class="platform-tab is-active" href="saved-posts.html" aria-current="page">X</a>
-        <a class="platform-tab" href="saved-pixiv-posts.html">Pixiv</a>
+        <a class="platform-tab" href="saved-posts.html">X</a>
+        <a class="platform-tab is-active" href="saved-pixiv-posts.html" aria-current="page">Pixiv</a>
       </nav>
       <nav id="folders-bar" class="folders-bar" aria-label="Saved post folders">
         <button class="folder-chip is-active" type="button" data-folder-id="">
-          <span class="folder-chip-name">All X posts</span>
+          <span class="folder-chip-name">All Pixiv posts</span>
           <span class="folder-chip-count">0</span>
         </button>
-        <button id="new-folder-btn" class="folder-add" type="button" title="Create X folder" aria-label="Create X folder">+</button>
+        <button id="new-folder-btn" class="folder-add" type="button" title="Create Pixiv folder" aria-label="Create Pixiv folder">+</button>
       </nav>
     </aside>
     <div class="saved-posts-content">
       <header class="page-header">
       <div>
-        <h1 id="page-title">Saved X Posts</h1>
-        <p id="page-subtitle">X posts stored locally in this browser</p>
+        <h1 id="page-title">Saved Pixiv Posts</h1>
+        <p id="page-subtitle">Pixiv posts stored locally in this browser</p>
       </div>
       <div class="header-actions">
         <button id="backup-btn" class="icon-button" type="button" title="Backup saved posts" aria-label="Backup saved posts">
@@ -41,8 +41,8 @@
       </div>
     </header>
     <p id="page-error" class="page-error" role="alert"></p>
-    <p id="empty-state" class="empty-state" hidden>No saved posts yet.</p>
-      <section id="posts-list" class="posts-list" aria-label="Saved posts"></section>
+    <p id="empty-state" class="empty-state" hidden>No saved Pixiv posts yet.</p>
+      <section id="posts-list" class="posts-list" aria-label="Saved Pixiv posts"></section>
       <nav id="pagination" class="pagination" aria-label="Saved posts pagination" hidden>
         <button id="pagination-prev" class="pagination-button" type="button">Previous</button>
         <span id="pagination-status" class="pagination-status" aria-live="polite">Page 1 of 1</span>

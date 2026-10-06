@@ -61,6 +61,20 @@
     },
     {
       "matches": [
+        "*://pixiv.net/*",
+        "*://www.pixiv.net/*"
+      ],
+      "js": [
+        "content/pixiv-saved-posts.js"
+      ],
+      "css": [
+        "content/pixiv-saved-posts.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
         "*://*.tiktok.com/*"
       ],
       "js": [

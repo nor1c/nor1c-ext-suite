@@ -99,10 +99,13 @@ button {
 }
 .saved-posts-shortcut .group-body { background: var(--surface); }
 .saved-posts-shortcut .toggle-card { justify-content: center; min-height: 48px; padding: 6px; }
+.saved-posts-actions { display: flex; gap: 10px; }
 .saved-posts-shortcut .row-icon { color: var(--accent); }
 .saved-posts-shortcut-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
 .saved-posts-shortcut-btn:hover { background: var(--accent); color: #fff; }
 .saved-posts-shortcut-btn svg { width: 20px; height: 20px; }
+.saved-posts-shortcut-btn--pixiv { background: #eef8ff; color: #0096fa; font-size: 17px; font-weight: 800; }
+.saved-posts-shortcut-btn--pixiv:hover { background: #0096fa; color: #fff; }
 
 /* ---------- Layout ---------- */
 .toggle-list {

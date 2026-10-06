@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap');
+
+#nor1c-save-pixiv-post {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0 0 0 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: #f1f1f1;
+  color: #5c5c5c;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color .15s ease, color .15s ease, transform .15s ease;
+}
+
+#nor1c-save-pixiv-post:hover {
+  background: #e5f5ff;
+  color: #0096fa;
+}
+
+#nor1c-save-pixiv-post:focus-visible {
+  outline: 3px solid rgba(0, 150, 250, .3);
+  outline-offset: 2px;
+}
+
+#nor1c-save-pixiv-post svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#nor1c-save-pixiv-post > span { display: none; }
+#nor1c-save-pixiv-post .saved-check { display: none; }
+#nor1c-save-pixiv-post[data-state="saved"] { background: #e9f8ef; color: #18a058; }
+#nor1c-save-pixiv-post[data-state="saved"] .saved-check { display: inline; }
+#nor1c-save-pixiv-post[data-state="partial"] { background: #fff4df; color: #b45309; }
+#nor1c-save-pixiv-post:disabled { opacity: .65; cursor: wait; }

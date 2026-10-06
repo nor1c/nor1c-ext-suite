@@ -4,14 +4,18 @@
   const savedPosts = new Map();
 
   chrome.storage.local.get({ [SAVED_POSTS_KEY]: [] }).then(result => {
-    for (const post of result[SAVED_POSTS_KEY] || []) savedPosts.set(post.id, post);
+    for (const post of result[SAVED_POSTS_KEY] || []) {
+      if (post.platform !== 'pixiv') savedPosts.set(post.id, post);
+    }
     updateButtons();
   }).catch(() => {});
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes[SAVED_POSTS_KEY]) return;
     savedPosts.clear();
-    for (const post of changes[SAVED_POSTS_KEY].newValue || []) savedPosts.set(post.id, post);
+    for (const post of changes[SAVED_POSTS_KEY].newValue || []) {
+      if (post.platform !== 'pixiv') savedPosts.set(post.id, post);
+    }
     updateButtons();
   });
 
@@ -45,6 +49,11 @@
   function findPost(article) {
     const anchors = Array.from(article.querySelectorAll('a[href*="/status/"]'))
       .filter(anchor => anchor.closest('article') === article);
+    const routePost = canonicalPostUrl(location.href);
+    if (routePost) {
+      const matchingAnchor = anchors.find(anchor => canonicalPostUrl(anchor.href)?.id === routePost.id);
+      return matchingAnchor ? routePost : null;
+    }
     const permalink = anchors.find(anchor => anchor.querySelector('time'));
     for (const anchor of permalink ? [permalink, ...anchors] : anchors) {
       const post = canonicalPostUrl(anchor.href);
@@ -71,13 +80,31 @@
     const seen = new Set();
 
     const hasVideo = own('video, [data-testid="videoPlayer"], [data-testid="videoComponent"]').length > 0;
-    for (const image of own('[data-testid="tweetPhoto"] img')) {
-      if (hasVideo && image.closest('[data-testid="videoPlayer"], [data-testid="videoComponent"]')) continue;
+    const routePost = canonicalPostUrl(location.href);
+    const photoRoute = routePost?.id === post.id && /\/status\/\d+\/photo\/\d+/i.test(location.pathname);
+    let images;
+    if (photoRoute) {
+      const dialog = document.querySelector('[role="dialog"]');
+      const modalImages = dialog
+        ? Array.from(dialog.querySelectorAll('img[src*="pbs.twimg.com/media/"]'))
+        : [];
+      const modalBackgrounds = dialog
+        ? Array.from(dialog.querySelectorAll('[style*="background-image"]')).map(node => {
+          const match = node.style.backgroundImage.match(/url\\(["']?([^"')]+)["']?\\)/i);
+          return match ? { currentSrc: match[1], src: match[1] } : null;
+        }).filter(Boolean)
+        : [];
+      images = [...modalImages, ...modalBackgrounds];
+    } else {
+      images = own('[data-testid="tweetPhoto"] img, a[href*="/photo/"] img, img[src*="pbs.twimg.com/media/"]');
+    }
+    for (const image of images) {
+      if (hasVideo && image.closest?.('[data-testid="videoPlayer"], [data-testid="videoComponent"]')) continue;
       const url = mediaUrl(image.currentSrc || image.src, 'image');
-      if (!url || seen.has(url)) continue;
+      if (!url || !/\/media\//i.test(new URL(url).pathname) || seen.has(url)) continue;
       seen.add(url);
       media.push({ kind: 'image', url });
-      if (media.length >= 10) break;
+      if (photoRoute || media.length >= 10) break;
     }
 
     const video = own('video')[0];
@@ -119,7 +146,7 @@
 
   async function chooseFolder(initialFolderIds = [], canDelete = false) {
     try {
-      const result = await chrome.runtime.sendMessage({ type: 'get-saved-folders' });
+      const result = await chrome.runtime.sendMessage({ type: 'get-saved-folders', platform: 'x' });
       if (!result?.success) return '';
       return await new Promise(resolve => {
         const host = document.createElement('div');
@@ -127,16 +154,18 @@
         const shadow = host.attachShadow({ mode: 'closed' });
         shadow.innerHTML = `<style>
           :host { all: initial; }
-          .backdrop { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; padding: 16px; background: rgba(15, 20, 25, .42); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          .backdrop { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; padding: 16px; overflow: hidden; overscroll-behavior: none; background: rgba(15, 20, 25, .42); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           font-size: 13px;
           line-height: 1.45; }
-          .modal { width: min(380px, calc(100vw - 32px)); padding: 20px; border-radius: 16px; background: #fff; color: #0f1419; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
-          h2 { margin: 0 0 6px; font-size: 19px; } p { margin: 0 0 14px; color: #536471; font-size: 13px; }
-          .folders { display: grid; gap: 6px; max-height: 230px; overflow: auto; }
-          .folder { width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid #cfd9de; border-radius: 9px; background: #fff; color: #0f1419; text-align: left; font: inherit; font-size: 14px; cursor: pointer; }
+          .modal { width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 24px); overflow: hidden; padding: 20px; border-radius: 16px; background: #fff; color: #0f1419; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
+          h2 { margin: 0 0 4px; font-size: 19px; } p { margin: 0 0 12px; color: #536471; font-size: 13px; }
+          .folders { display: grid; gap: 3px; max-height: min(680px, calc(100vh - 210px)); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 4px; border: 1px solid #e5eaed; border-radius: 10px; background: #f7f9fa; }
+          .folder { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 3px 10px; border: 1px solid #cfd9de; border-radius: 6px; background: #fff; color: #0f1419; text-align: left; font: inherit; font-size: 14px; cursor: pointer; }
+          .folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .folder-count { flex: 0 0 auto; min-width: 24px; padding: 1px 6px; border-radius: 999px; background: #eef3f5; color: #536471; font-size: 12px; font-weight: 700; line-height: 1.3; text-align: center; }
           .folder:hover, .folder.selected { border-color: #1d9bf0; background: #eff7ff; }
           .new-folder { display: flex; gap: 8px; margin-top: 12px; } input { min-width: 0; flex: 1; height: 36px; padding: 0 10px; border: 1px solid #cfd9de; border-radius: 8px; font: inherit; } button { height: 36px; padding: 0 13px; border: 1px solid #cfd9de; border-radius: 999px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; } button.primary { border-color: #1d9bf0; background: #1d9bf0; color: #fff; } button:hover { background: #eff3f4; } button.primary:hover { background: #1a8cd8; }
-          .actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; } .actions .cancel { margin-left: auto; }
+          .actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; } .actions .cancel { margin-left: auto; }
           button.delete-all { border-color: #f0b4b4; color: #b42318; } button.delete-all:hover { border-color: #e48787; background: #fff1f1; }
         </style><div class="backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="nor1c-folder-title"><h2 id="nor1c-folder-title">Save post</h2><p>Choose one or more folders for this saved post.</p><div class="folders"><button type="button" class="folder" data-id="" aria-pressed="false">No folder</button></div><div class="new-folder"><input maxlength="60" placeholder="New folder name" aria-label="New folder name"><button type="button" class="create">Create</button></div><div class="actions"><button type="button" class="delete-all">Delete from all folders</button><button type="button" class="cancel">Cancel</button><button type="button" class="primary confirm">Save</button></div></section></div>`;
         document.documentElement.appendChild(host);
@@ -147,7 +176,14 @@
         const deleteAll = shadow.querySelector('.delete-all');
         deleteAll.hidden = !canDelete;
         let settled = false;
-        const finish = value => { if (settled) return; settled = true; host.remove(); resolve(value); };
+        const onKeyDown = event => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          finish(null);
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        const finish = value => { if (settled) return; settled = true; document.removeEventListener('keydown', onKeyDown, true); host.remove(); resolve(value); };
         const syncNoFolder = () => {
           const node = foldersEl.querySelector('[data-id=""]');
           node?.classList.toggle('selected', selectedIds.size === 0);
@@ -168,9 +204,10 @@
         };
         const noFolder = foldersEl.querySelector('.folder');
         noFolder.addEventListener('click', () => toggleFolder('', noFolder));
-        for (const folder of result.folders || []) { const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = folder.id; node.textContent = folder.name; node.classList.toggle('selected', selectedIds.has(folder.id)); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); node.addEventListener('click', () => { toggleFolder(folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); }); foldersEl.appendChild(node); }
+        const folders = [...(result.folders || [])].sort((a, b) => (b.itemCount || 0) - (a.itemCount || 0));
+        for (const folder of folders) { const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = folder.id; node.innerHTML = `<span class="folder-name"></span><span class="folder-count">${Number(folder.itemCount) || 0}</span>`; node.querySelector('.folder-name').textContent = folder.name; node.classList.toggle('selected', selectedIds.has(folder.id)); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); node.addEventListener('click', () => { toggleFolder(folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(folder.id))); }); foldersEl.appendChild(node); }
         syncNoFolder();
-        shadow.querySelector('.create').addEventListener('click', async () => { const name = input.value.trim(); if (!name) return input.focus(); const created = await chrome.runtime.sendMessage({ type: 'create-saved-folder', name }); if (!created?.success) return; const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = created.folder.id; node.textContent = created.folder.name; node.setAttribute('aria-pressed', 'true'); node.addEventListener('click', () => { toggleFolder(created.folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(created.folder.id))); }); foldersEl.appendChild(node); toggleFolder(created.folder.id, node); input.value = ''; });
+        shadow.querySelector('.create').addEventListener('click', async () => { const name = input.value.trim(); if (!name) return input.focus(); const created = await chrome.runtime.sendMessage({ type: 'create-saved-folder', name, platform: 'x' }); if (!created?.success) return; const node = document.createElement('button'); node.type = 'button'; node.className = 'folder'; node.dataset.id = created.folder.id; node.innerHTML = '<span class="folder-name"></span><span class="folder-count">0</span>'; node.querySelector('.folder-name').textContent = created.folder.name; node.setAttribute('aria-pressed', 'true'); node.addEventListener('click', () => { toggleFolder(created.folder.id, node); node.setAttribute('aria-pressed', String(selectedIds.has(created.folder.id))); }); foldersEl.appendChild(node); toggleFolder(created.folder.id, node); input.value = ''; });
         shadow.querySelector('.confirm').addEventListener('click', () => finish({ action: 'save', folderIds: Array.from(selectedIds) }));
         deleteAll.addEventListener('click', () => finish({ action: 'delete' }));
         shadow.querySelector('.cancel').addEventListener('click', () => finish(null));
@@ -182,6 +219,9 @@
         host.addEventListener('keypress', event => event.stopPropagation(), true);
         host.addEventListener('keyup', event => event.stopPropagation(), true);
         shadow.querySelector('.folder').focus();
+        shadow.querySelector('.backdrop').addEventListener('wheel', event => {
+          if (!event.target.closest('.folders')) event.preventDefault();
+        }, { passive: false });
       });
     } catch (_) { return ''; }
   }

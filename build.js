@@ -30,6 +30,7 @@ const COPY_FILES = [
   'website-blocker-panel.css',
   'website-blocker-panel.js',
   'saved-posts.html',
+  'saved-pixiv-posts.html',
   'saved-posts.css',
   'saved-posts.js',
   'background-saved-posts.js',

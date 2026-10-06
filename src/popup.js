@@ -733,8 +733,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   })
 
-  document.getElementById('saved-posts-open-btn').addEventListener('click', () => {
+  document.getElementById('saved-x-posts-open-btn').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('saved-posts.html') });
+  });
+  document.getElementById('saved-pixiv-posts-open-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('saved-pixiv-posts.html') });
   });
 
   // Website Blocker toggle & panel opener
