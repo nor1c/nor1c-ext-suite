@@ -138,6 +138,11 @@ test('built saved-posts page renders media from stored source URLs', async () =>
     const viewerOpen = await page.$eval('#image-viewer', dialog => ({ open: dialog.open, imageSrc: dialog.querySelector('img').src }));
     assert.equal(viewerOpen.open, true);
     assert.equal(viewerOpen.imageSrc, 'https://pbs.twimg.com/media/ext-test.svg');
+    await page.click('#image-viewer-media img');
+    assert.equal(await page.$eval('#image-viewer', dialog => dialog.open), true);
+    await page.mouse.click(4, 4);
+    assert.equal(await page.$eval('#image-viewer', dialog => dialog.open), false);
+    await page.click('.media-item img');
     await page.keyboard.press('Escape');
     assert.equal(await page.$eval('#image-viewer', dialog => dialog.open), false);
 

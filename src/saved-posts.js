@@ -169,7 +169,11 @@ const stopPan = event => {
 imageViewerMedia.addEventListener('pointerup', stopPan);
 imageViewerMedia.addEventListener('pointercancel', stopPan);
 imageViewer.addEventListener('click', event => {
-  if (event.target === imageViewer) closeImageViewer();
+  if (event.target.closest('.viewer-nav, .image-viewer-close')) return;
+  const media = imageViewerMedia.querySelector('.viewer-image, .viewer-video');
+  const bounds = media?.getBoundingClientRect();
+  const outsideMedia = !bounds || event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
+  if (outsideMedia) closeImageViewer();
 });
 
 function clearMediaUrls() {
@@ -432,7 +436,7 @@ async function renderPostsOnce() {
 
 function renderFolders(folders, posts) {
   const bar = document.getElementById('folders-bar');
-  bar.querySelectorAll('.folder-chip:not([data-folder-id=""])').forEach(node => node.remove());
+  bar.querySelectorAll('.folder-chip-row').forEach(node => node.remove());
   const folderCounts = new Map(folders.map(folder => [folder.id, 0]));
   for (const post of posts) {
     for (const folderId of postFolderIds(post)) {
@@ -440,6 +444,7 @@ function renderFolders(folders, posts) {
     }
   }
   for (const folder of folders) {
+    const row = element('div', 'folder-chip-row');
     const chip = element('button', 'folder-chip');
     chip.type = 'button';
     chip.dataset.folderId = folder.id;
@@ -447,7 +452,11 @@ function renderFolders(folders, posts) {
     chip.append(element('span', 'folder-chip-name', folder.name), element('span', 'folder-chip-count', String(folderCounts.get(folder.id) || 0)));
     chip.classList.toggle('is-active', folder.id === activeFolderId);
     chip.addEventListener('click', () => { activeFolderId = folder.id; currentPage = 1; renderPosts(); });
-    bar.insertBefore(chip, document.getElementById('new-folder-btn'));
+    const remove = iconButton('button', 'folder-delete-button', `Delete ${folder.name} folder`, 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
+    remove.type = 'button';
+    remove.addEventListener('click', () => deleteFolder(folder, folderCounts.get(folder.id) || 0));
+    row.append(chip, remove);
+    bar.insertBefore(row, document.getElementById('new-folder-btn'));
   }
   const allPosts = bar.querySelector('[data-folder-id=""]');
   const allCount = allPosts?.querySelector('.folder-chip-count');
@@ -456,6 +465,20 @@ function renderFolders(folders, posts) {
   allPosts?.classList.toggle('is-active', !activeFolderId);
   allPosts?.removeEventListener('click', selectAllPosts);
   allPosts?.addEventListener('click', selectAllPosts);
+}
+
+async function deleteFolder(folder, postCount) {
+  if (postCount > 0 && !window.confirm(`Delete "${folder.name}" folder? ${postCount} saved post(s) in this folder will remain saved, but will be removed from the folder.`)) return;
+  const error = document.getElementById('page-error');
+  error.textContent = '';
+  const result = await chrome.runtime.sendMessage({ type: 'delete-saved-folder', id: folder.id });
+  if (!result?.success) {
+    error.textContent = result?.error || 'Could not delete folder.';
+    return;
+  }
+  if (activeFolderId === folder.id) activeFolderId = '';
+  currentPage = 1;
+  await renderPosts();
 }
 
 function selectAllPosts() {

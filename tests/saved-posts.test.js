@@ -584,6 +584,9 @@ test('saved posts separate X and Pixiv views, folders, and cards', () => {
   assert.match(gallerySource, /postFolderIds\(post\)\.filter\(id => id !== folderId\)/);
   assert.match(gallerySource, /activeFolderId \? 'Remove post from this folder' : 'Remove saved post'/);
   assert.match(gallerySource, /iconButton\('button', 'folder-button', 'Organize post folders'/);
+  assert.match(gallerySource, /'folder-delete-button', `Delete \$\{folder\.name\} folder`/);
+  assert.match(gallerySource, /postCount > 0 && !window\.confirm/);
+  assert.match(gallerySource, /type: 'delete-saved-folder', id: folder\.id/);
   assert.match(html, /id="folder-manager"/);
 });
 
