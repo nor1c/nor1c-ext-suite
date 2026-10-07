@@ -32,6 +32,9 @@
         <p id="page-subtitle">Pixiv posts stored locally in this browser</p>
       </div>
       <div class="header-actions">
+        <button id="images-only-btn" class="icon-button" type="button" title="Show full posts" aria-label="Images only" aria-pressed="true" aria-controls="posts-list">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+        </button>
         <button id="backup-btn" class="icon-button" type="button" title="Backup saved posts" aria-label="Backup saved posts">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v6h8V3M8 15h8v6"/></svg>
         </button>
@@ -42,7 +45,7 @@
     </header>
     <p id="page-error" class="page-error" role="alert"></p>
     <p id="empty-state" class="empty-state" hidden>No saved Pixiv posts yet.</p>
-      <section id="posts-list" class="posts-list" aria-label="Saved Pixiv posts"></section>
+      <section id="posts-list" class="posts-list images-only" aria-label="Saved Pixiv posts"></section>
       <nav id="pagination" class="pagination" aria-label="Saved posts pagination" hidden>
         <button id="pagination-prev" class="pagination-button" type="button">Previous</button>
         <span id="pagination-status" class="pagination-status" aria-live="polite">Page 1 of 1</span>

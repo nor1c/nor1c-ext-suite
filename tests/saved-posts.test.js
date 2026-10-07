@@ -608,7 +608,7 @@ test('saved posts folder list shows item counts and paginates 30 posts per page'
   assert.match(gallerySource, /const folderCounts = new Map/);
   assert.match(gallerySource, /folderCounts\.set\(folderId, folderCounts\.get\(folderId\) \+ 1\)/);
   assert.match(gallerySource, /visiblePosts\.slice\(pageRange\.start, pageRange\.end\)/);
-  assert.match(gallerySource, /currentPage = 1; renderPosts\(\)/);
+  assert.match(gallerySource, /currentPage = 1; navigatePosts\(\)/);
   assert.match(html, /class="folder-chip-count">0<\/span>/);
   assert.match(html, /id="pagination"/);
   assert.match(html, /id="pagination-prev"/);
@@ -619,7 +619,7 @@ test('saved posts folder list shows item counts and paginates 30 posts per page'
 
 test('saved posts renders and deletes cards without a blank refresh', () => {
   assert.match(savedPostsPageSource, /let renderQueue = Promise\.resolve\(\)/);
-  assert.match(savedPostsPageSource, /const result = renderQueue\.then\(renderPostsOnce\)/);
+  assert.match(savedPostsPageSource, /const result = renderQueue\.then\(\(\) => renderPostsOnce\(version\)\)/);
   assert.match(savedPostsPageSource, /const fragment = document\.createDocumentFragment\(\)/);
   assert.match(savedPostsPageSource, /list\.replaceChildren\(fragment\)/);
   assert.match(savedPostsPageSource, /card\.classList\.add\('post-removing'\)/);
@@ -664,8 +664,9 @@ test('saved posts gallery loads linked media directly and supports legacy local 
   assert.match(gallerySource, /imageViewer\.addEventListener\('cancel'/);
   assert.match(gallerySource, /ArrowLeft/);
   assert.match(gallerySource, /ArrowRight/);
-  assert.match(gallerySource, /document\.querySelectorAll\('#posts-list \.post'\)/);
-  assert.match(gallerySource, /viewerItems = postCards\.flatMap/);
+  assert.match(gallerySource, /document\.querySelectorAll\('#posts-list \.media-item img, #posts-list \.media-item video'\)/);
+  assert.match(gallerySource, /content\.closest\('\.post'\)\.querySelector\('\.media-item img'\)/);
+  assert.match(gallerySource, /media\.indexOf\(firstImage\)/);
   assert.doesNotMatch(gallerySource, /element\('p', 'post-text', post\.text\)/);
   assert.match(gallerySource, /actions\.appendChild\(retry\)/);
   assert.match(gallerySource, /actions\.appendChild\(link\)/);

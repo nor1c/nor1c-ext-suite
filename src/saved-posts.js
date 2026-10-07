@@ -6,6 +6,8 @@ const POSTS_PER_PAGE = 30;
 let activePlatform = document.documentElement.dataset.platform === 'pixiv' ? 'pixiv' : 'x';
 let activeFolderId = '';
 let currentPage = 1;
+let imagesOnly = true;
+const imagesOnlyButton = document.getElementById('images-only-btn');
 const mediaUrls = new Set();
 const imageViewer = document.getElementById('image-viewer');
 const imageViewerClose = document.getElementById('image-viewer-close');
@@ -34,6 +36,7 @@ let dragOrigin = null;
 let dragStart = null;
 let didPan = false;
 let renderQueue = Promise.resolve();
+let renderVersion = 0;
 let localMutationDepth = 0;
 
 function applyImageTransform() {
@@ -382,6 +385,40 @@ backupFile.addEventListener('change', async () => {
   }
 });
 
+function readViewFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get('page') || '';
+  const number = Number(page);
+  currentPage = /^\d+$/.test(page) && Number.isSafeInteger(number) && number > 0 ? number : 1;
+  activeFolderId = params.get('folder') || '';
+  imagesOnly = params.get('view') !== 'full';
+}
+
+function updateImagesOnlyUi() {
+  imagesOnlyButton.setAttribute('aria-pressed', String(imagesOnly));
+  imagesOnlyButton.title = imagesOnly ? 'Show full posts' : 'Show images only';
+  document.getElementById('posts-list').classList.toggle('images-only', imagesOnly);
+}
+
+function syncViewUrl(mode = 'replace') {
+  const url = new URL(window.location.href);
+  url.searchParams.set('page', String(currentPage));
+  if (activeFolderId) url.searchParams.set('folder', activeFolderId);
+  else url.searchParams.delete('folder');
+  if (imagesOnly) url.searchParams.delete('view');
+  else url.searchParams.set('view', 'full');
+  if (url.href === window.location.href) return;
+  if (mode === 'push') window.history.pushState(null, '', url.href);
+  else window.history.replaceState(null, '', url.href);
+}
+
+function navigatePosts() {
+  closeImageViewer();
+  updateImagesOnlyUi();
+  syncViewUrl('push');
+  renderPosts();
+}
+
 function renderPagination(totalItems) {
   const totalPages = Math.max(1, Math.ceil(totalItems / POSTS_PER_PAGE));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -392,45 +429,66 @@ function renderPagination(totalItems) {
   return { start: (currentPage - 1) * POSTS_PER_PAGE, end: currentPage * POSTS_PER_PAGE };
 }
 
+function updateEmptyState() {
+  const empty = document.getElementById('empty-state');
+  const list = document.getElementById('posts-list');
+  empty.hidden = Boolean(list.querySelector(imagesOnly ? '.media-item img' : '.post'));
+  empty.textContent = imagesOnly
+    ? 'No images available in this view. Turn off Images only to see all saved posts.'
+    : activePlatform === 'pixiv' ? 'No saved Pixiv posts yet.' : 'No saved posts yet.';
+}
+
 function renderPosts() {
-  const result = renderQueue.then(renderPostsOnce);
+  const version = ++renderVersion;
+  const result = renderQueue.then(() => renderPostsOnce(version));
   renderQueue = result.catch(() => {});
   return result;
 }
 
-async function renderPostsOnce() {
+async function renderPostsOnce(version) {
+  if (version !== renderVersion) return;
   const list = document.getElementById('posts-list');
-  const empty = document.getElementById('empty-state');
   const error = document.getElementById('page-error');
   const nextMediaUrls = new Set();
   error.textContent = '';
 
   try {
     const result = await chrome.storage.local.get({ [STORAGE_KEY]: [], [FOLDERS_KEY]: [] });
+    if (version !== renderVersion) return;
     const posts = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
     const allFolders = migrateFolderPlatforms(Array.isArray(result[FOLDERS_KEY]) ? result[FOLDERS_KEY] : [], posts);
     const platformPosts = posts.filter(post => postPlatform(post) === activePlatform);
     const folders = allFolders.filter(folder => folderPlatform(folder) === activePlatform);
-    if (activeFolderId && !folders.some(folder => folder.id === activeFolderId)) activeFolderId = '';
-    const visiblePosts = activeFolderId ? platformPosts.filter(post => postFolderIds(post).includes(activeFolderId)) : platformPosts;
+    if (activeFolderId && !folders.some(folder => folder.id === activeFolderId)) {
+      activeFolderId = '';
+      currentPage = 1;
+    }
+    const folderPosts = activeFolderId ? platformPosts.filter(post => postFolderIds(post).includes(activeFolderId)) : platformPosts;
+    const visiblePosts = imagesOnly ? folderPosts.filter(post => post.media?.some(item => item.kind === 'image')) : folderPosts;
     const pageRange = renderPagination(visiblePosts.length);
+    syncViewUrl();
     const folderNames = new Map(folders.map(folder => [folder.id, folder.name]));
     const cards = [];
     for (const post of visiblePosts.slice(pageRange.start, pageRange.end)) {
       cards.push(await createPost(post, folderNames, nextMediaUrls));
+      if (version !== renderVersion) {
+        for (const url of nextMediaUrls) URL.revokeObjectURL(url);
+        return;
+      }
     }
 
     const fragment = document.createDocumentFragment();
     fragment.append(...cards);
+    closeImageViewer();
     clearMediaUrls();
     for (const url of nextMediaUrls) mediaUrls.add(url);
     viewerItems = [];
     renderFolders(folders, platformPosts);
-    empty.hidden = visiblePosts.length !== 0;
     list.replaceChildren(fragment);
+    updateEmptyState();
   } catch (cause) {
     for (const url of nextMediaUrls) URL.revokeObjectURL(url);
-    error.textContent = cause instanceof Error ? cause.message : 'Could not load saved posts.';
+    if (version === renderVersion) error.textContent = cause instanceof Error ? cause.message : 'Could not load saved posts.';
   }
 }
 
@@ -451,7 +509,7 @@ function renderFolders(folders, posts) {
     chip.title = `${folder.name} (${folderCounts.get(folder.id) || 0})`;
     chip.append(element('span', 'folder-chip-name', folder.name), element('span', 'folder-chip-count', String(folderCounts.get(folder.id) || 0)));
     chip.classList.toggle('is-active', folder.id === activeFolderId);
-    chip.addEventListener('click', () => { activeFolderId = folder.id; currentPage = 1; renderPosts(); });
+    chip.addEventListener('click', () => { activeFolderId = folder.id; currentPage = 1; navigatePosts(); });
     const remove = iconButton('button', 'folder-delete-button', `Delete ${folder.name} folder`, 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
     remove.type = 'button';
     remove.addEventListener('click', () => deleteFolder(folder, folderCounts.get(folder.id) || 0));
@@ -484,7 +542,7 @@ async function deleteFolder(folder, postCount) {
 function selectAllPosts() {
   activeFolderId = '';
   currentPage = 1;
-  renderPosts();
+  navigatePosts();
 }
 
 function updatePlatformUi() {
@@ -532,7 +590,7 @@ async function createPost(post, folderNames = new Map(), createdMediaUrls = medi
   card.appendChild(postUrl);
   const body = element('div', 'post-body');
 
-  const mediaItems = post.media || [];
+  const mediaItems = imagesOnly ? (post.media || []).filter(item => item.kind === 'image') : post.media || [];
   if (mediaItems.length) {
     const grid = element('div', `media-grid media-count-${Math.min(mediaItems.length, 4)}`);
     for (const item of mediaItems) {
@@ -619,6 +677,7 @@ async function createPost(post, folderNames = new Map(), createdMediaUrls = medi
             content.remove();
             frame.replaceChildren(element('p', 'media-error', message));
             revealFetchButton();
+            if (frame.isConnected) updateEmptyState();
           };
           content.addEventListener('load', () => {
             if (item.kind === 'image' && content.naturalWidth === 0) {
@@ -647,21 +706,19 @@ async function createPost(post, folderNames = new Map(), createdMediaUrls = medi
             content.loading = 'eager';
             content.tabIndex = 0;
             content.title = 'Open image viewer';
-            content.addEventListener('click', () => {
-              const postCards = Array.from(document.querySelectorAll('#posts-list .post'));
-              viewerItems = postCards.flatMap(card => Array.from(card.querySelectorAll('.media-item img, .media-item video')).map(media => ({ src: media.src, alt: media.alt || 'Saved post video', kind: media.tagName.toLowerCase() })));
-              const currentPost = content.closest('.post');
-              const targetMedia = currentPost.querySelector('.media-item img, .media-item video');
-              const index = viewerItems.findIndex(item => item.src === targetMedia?.src);
-              openImageViewer(viewerItems, index);
-            });
+            const openPostViewer = () => {
+              const media = Array.from(document.querySelectorAll('#posts-list .media-item img, #posts-list .media-item video'));
+              const firstImage = content.closest('.post').querySelector('.media-item img');
+              const index = media.indexOf(firstImage);
+              if (index < 0) return;
+              const items = media.map(item => ({ src: item.src, alt: item.alt || 'Saved post video', kind: item.tagName.toLowerCase() }));
+              openImageViewer(items, index);
+            };
+            content.addEventListener('click', openPostViewer);
             content.addEventListener('keydown', event => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                const postCards = Array.from(document.querySelectorAll('#posts-list .post'));
-                viewerItems = postCards.flatMap(card => Array.from(card.querySelectorAll('.media-item img, .media-item video')).map(media => ({ src: media.src, alt: media.alt || 'Saved post video', kind: media.tagName.toLowerCase() })));
-                const index = viewerItems.findIndex(item => item.src === url);
-                openImageViewer(viewerItems, index);
+                openPostViewer();
               }
             });
           }
@@ -754,16 +811,22 @@ document.getElementById('new-folder-btn').addEventListener('click', async () => 
   if (!result?.success) document.getElementById('page-error').textContent = result?.error || 'Could not create folder.';
   else renderPosts();
 });
+imagesOnlyButton.addEventListener('click', () => {
+  imagesOnly = !imagesOnly;
+  currentPage = 1;
+  navigatePosts();
+});
 document.getElementById('refresh-btn').addEventListener('click', renderPosts);
 paginationPrev.addEventListener('click', () => {
   if (currentPage <= 1) return;
   currentPage -= 1;
-  renderPosts();
+  navigatePosts();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 paginationNext.addEventListener('click', () => {
+  if (paginationNext.disabled) return;
   currentPage += 1;
-  renderPosts();
+  navigatePosts();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -771,6 +834,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (localMutationDepth > 0) return;
   renderPosts();
 });
+window.addEventListener('popstate', () => {
+  closeImageViewer();
+  if (folderManager.open) folderManager.close();
+  readViewFromUrl();
+  updateImagesOnlyUi();
+  renderPosts();
+});
 window.addEventListener('beforeunload', clearMediaUrls);
+readViewFromUrl();
+updateImagesOnlyUi();
 updatePlatformUi();
 renderPosts();
