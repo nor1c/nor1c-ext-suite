@@ -172,9 +172,10 @@
   }
 
   function setButtonState(button, state, message) {
+    const label = message || ({ saved: 'Edit saved Pixiv post folders', saving: 'Saving Pixiv post…', partial: 'Refresh saved Pixiv images', idle: 'Save Pixiv post' })[state];
+    if (button.dataset.state === state && button.title === label) return;
     button.dataset.state = state;
     button.disabled = state === 'saving';
-    const label = message || ({ saved: 'Edit saved Pixiv post folders', saving: 'Saving Pixiv post…', partial: 'Refresh saved Pixiv images', idle: 'Save Pixiv post' })[state];
     button.innerHTML = state === 'saving'
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></svg><span>SAVING</span>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4zM4 14h4l2 3h4l2-3h4"/><path class="saved-check" d="m9 11 2 2 4-4"/></svg><span>SAVE</span>';
@@ -212,19 +213,36 @@
     }
   }
 
-  function findActionPlacement() {
-    const heart = document.querySelector('main button.gtm-main-bookmark');
+  function isVisible(node) {
+    return node.getClientRects().length > 0 && getComputedStyle(node).visibility === 'visible';
+  }
+
+  function findActionPlacement(post) {
+    const bookmarkLink = Array.from(document.querySelectorAll('main a[href*="bookmark_add.php"]')).find(link => {
+      if (!isVisible(link)) return false;
+      try {
+        const url = new URL(link.href, location.href);
+        return url.origin === location.origin && url.pathname === '/bookmark_add.php' &&
+          url.searchParams.get('type') === 'illust' && url.searchParams.get('illust_id') === post.id;
+      } catch (_) {
+        return false;
+      }
+    });
+    if (bookmarkLink?.parentElement?.parentElement) {
+      return { area: bookmarkLink.parentElement.parentElement, after: bookmarkLink.parentElement };
+    }
+    const bookmark = Array.from(document.querySelectorAll('main [data-ga4-label="bookmark_button"]')).find(isVisible);
+    if (bookmark?.parentElement) {
+      return { area: bookmark.parentElement, after: bookmark };
+    }
+    const heart = Array.from(document.querySelectorAll('main button.gtm-main-bookmark')).find(isVisible);
     if (heart?.parentElement?.parentElement) {
       return { area: heart.parentElement.parentElement, after: heart.parentElement };
     }
-    const bookmark = document.querySelector('main [data-ga4-label="bookmark_button"] > button');
-    if (bookmark?.parentElement?.parentElement) {
-      return { area: bookmark.parentElement.parentElement, after: bookmark.parentElement };
-    }
-    const like = Array.from(document.querySelectorAll('main button')).find(button => button.textContent.trim() === 'Like');
+    const like = Array.from(document.querySelectorAll('main button')).find(button => button.textContent.trim() === 'Like' && isVisible(button));
     if (like?.parentElement) return { area: like.parentElement, after: like };
-    const heading = document.querySelector('main h1');
-    const area = heading?.parentElement || document.querySelector('main');
+    const heading = Array.from(document.querySelectorAll('main h1')).find(isVisible);
+    const area = heading?.parentElement || Array.from(document.querySelectorAll('main')).find(isVisible);
     return area ? { area, after: null } : null;
   }
 
@@ -238,7 +256,7 @@
 
   function mount() {
     const post = artworkFromLocation();
-    const existing = document.getElementById(BUTTON_ID);
+    let existing = document.getElementById(BUTTON_ID);
     if (!post) {
       existing?.remove();
       currentArtworkId = '';
@@ -249,8 +267,9 @@
       currentArtworkId = post.id;
       artworkPromise = null;
       existing?.remove();
+      existing = null;
     }
-    const placement = findActionPlacement();
+    const placement = findActionPlacement(post);
     if (!placement) return;
     if (existing) {
       placeButton(existing, placement);
@@ -277,7 +296,12 @@
     scheduled = true;
     requestAnimationFrame(() => { scheduled = false; mount(); });
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'hidden', 'data-ga4-label', 'href']
+  });
   window.addEventListener('popstate', mount);
   mount();
 })();
