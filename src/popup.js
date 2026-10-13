@@ -27,8 +27,7 @@ const BACKUP_KEYS = [
   'blockedSelectors',
   'ytControlPanel',
   'websiteBlockerRules',
-  'websiteBlockerSchedule',
-  'websiteBlockerChallengeEnabled'
+  'websiteBlockerSchedule'
 ];
 const YT_STRING_SETTING_KEYS = new Set([
   'enforceTheme',
@@ -92,7 +91,6 @@ function validateSetting(key, value) {
       return false;
     });
   }
-  if (key === 'websiteBlockerChallengeEnabled') return typeof value === 'boolean';
   if (key === 'websiteBlockerRules') {
     if (!Array.isArray(value)) return false;
     return value.every(rule =>
@@ -115,7 +113,8 @@ function validateBackupPayload(payload) {
   if (payload.version !== BACKUP_VERSION) throw new Error(`Unsupported backup version: ${String(payload.version)}`);
   if (!isPlainObject(payload.data)) throw new Error('Invalid backup data.');
 
-  const unknownKey = Object.keys(payload.data).find(key => !BACKUP_KEYS.includes(key));
+  // Accept the retired quiz flag in old backups without restoring it.
+  const unknownKey = Object.keys(payload.data).find(key => !BACKUP_KEYS.includes(key) && key !== 'websiteBlockerChallengeEnabled');
   if (unknownKey) throw new Error(`Unknown setting: ${unknownKey}`);
 
   const settings = {};
@@ -127,16 +126,6 @@ function validateBackupPayload(payload) {
       : payload.data[key];
   }
   return settings;
-}
-
-async function ensureBlockerImportAllowed(settings) {
-  const blockerKeys = ['websiteBlockerRules', 'websiteBlockerSchedule', 'websiteBlockerChallengeEnabled'];
-  if (!blockerKeys.some(key => key in settings)) return;
-  const current = await chrome.storage.sync.get(blockerKeys);
-  if (current.websiteBlockerChallengeEnabled !== true) return;
-  if (blockerKeys.some(key => key in settings && JSON.stringify(settings[key]) !== JSON.stringify(current[key]))) {
-    throw new Error('Complete the challenge to turn off protection in Manage Blocked Sites before importing blocker changes.');
-  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -716,7 +705,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const text = await file.text();
       const payload = JSON.parse(text);
       const toSet = validateBackupPayload(payload);
-      await ensureBlockerImportAllowed(toSet);
       await chrome.storage.sync.set(toSet);
       window.location.reload();
     } catch (err) {

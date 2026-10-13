@@ -429,8 +429,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     videoAutoHide: false,
     videoAutoHideDelay: 3,
     websiteBlockerRules: [],
-    websiteBlockerSchedule: { start: '09:00', end: '17:00' },
-    websiteBlockerChallengeEnabled: false
+    websiteBlockerSchedule: { start: '09:00', end: '17:00' }
   };
   const stored = await chrome.storage.sync.get([...Object.keys(defaults), 'volumeControlLevels']);
   const missing = {};

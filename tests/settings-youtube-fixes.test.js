@@ -59,7 +59,7 @@ test('backup validation rejects exact version, invalid key values, and unknown k
 });
 
 test('import validates completely before one atomic storage write and displays key failure', () => {
-  assert.match(popupSource, /const toSet = validateBackupPayload\(payload\);\s+await ensureBlockerImportAllowed\(toSet\);\s+await chrome\.storage\.sync\.set\(toSet\);/);
+  assert.match(popupSource, /const toSet = validateBackupPayload\(payload\);\s+await chrome\.storage\.sync\.set\(toSet\);/);
   assert.match(popupSource, /importError\.textContent = err instanceof Error \? err\.message : 'Import failed';/);
   const importHandler = popupSource.slice(popupSource.indexOf("document.getElementById('import-file')"), popupSource.indexOf("document.getElementById(\"yt-control-panel-btn\")"));
   assert.equal((importHandler.match(/chrome\.storage\.sync\.set\(/g) || []).length, 1);

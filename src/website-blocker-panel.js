@@ -1,103 +1,15 @@
 const RULES_STORAGE_KEY = 'websiteBlockerRules';
 const SCHEDULE_STORAGE_KEY = 'websiteBlockerSchedule';
-const CHALLENGE_STORAGE_KEY = 'websiteBlockerChallengeEnabled';
 const DEFAULT_SCHEDULE = { start: '09:00', end: '17:00' };
-const CHALLENGE_LENGTH = 3;
 let settingsChangePending = false;
-
-function createChallengeQuestion() {
-  const random = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
-  const a = random(12, 79);
-  const b = random(12, 49);
-  const c = random(11, 39);
-  const d = random(11, 29);
-  const e = random(100, Math.min(499, a * b + c * d - 1));
-  return { text: `(${a} × ${b}) + (${c} × ${d}) − ${e}`, answer: a * b + c * d - e };
-}
-
-function createChallengeSession() {
-  return {
-    correct: 0,
-    question: createChallengeQuestion(),
-    submit(value) {
-      if (!/^-?\d+$/.test(value.trim()) || !Number.isSafeInteger(Number(value))) return 'invalid';
-      if (Number(value) !== this.question.answer) {
-        this.correct = 0;
-        this.question = createChallengeQuestion();
-        return 'wrong';
-      }
-      this.correct += 1;
-      if (this.correct === CHALLENGE_LENGTH) return 'complete';
-      this.question = createChallengeQuestion();
-      return 'next';
-    }
-  };
-}
-
-function requestChallenge(action) {
-  const dialog = document.getElementById('unblock-challenge');
-  const form = document.getElementById('challenge-form');
-  const answer = document.getElementById('challenge-answer');
-  const progress = document.getElementById('challenge-progress');
-  const error = document.getElementById('challenge-error');
-  const cancel = document.getElementById('challenge-cancel');
-  const session = createChallengeSession();
-  document.getElementById('challenge-action').textContent = action;
-
-  function renderQuestion() {
-    progress.textContent = `Question ${session.correct + 1} of ${CHALLENGE_LENGTH}`;
-    document.getElementById('challenge-question').textContent = session.question.text;
-    answer.value = '';
-    answer.focus();
-  }
-
-  return new Promise(resolve => {
-    let settled = false;
-    function finish(approved) {
-      if (settled) return;
-      settled = true;
-      form.removeEventListener('submit', submit);
-      cancel.removeEventListener('click', cancelChallenge);
-      dialog.removeEventListener('cancel', cancelChallenge);
-      dialog.removeEventListener('close', cancelChallenge);
-      dialog.close();
-      resolve(approved);
-    }
-    function cancelChallenge(event) {
-      event.preventDefault();
-      finish(false);
-    }
-    function submit(event) {
-      event.preventDefault();
-      const result = session.submit(answer.value);
-      if (result === 'complete') {
-        finish(true);
-        return;
-      }
-      error.textContent = result === 'wrong'
-        ? 'Incorrect. Progress reset — start again with a new question.'
-        : result === 'invalid' ? 'Enter a whole number, without spaces or separators.' : '';
-      if (result !== 'invalid') renderQuestion();
-      else answer.focus();
-    }
-    form.addEventListener('submit', submit);
-    cancel.addEventListener('click', cancelChallenge);
-    dialog.addEventListener('cancel', cancelChallenge);
-    dialog.addEventListener('close', cancelChallenge);
-    error.textContent = '';
-    dialog.showModal();
-    renderQuestion();
-  });
-}
 
 function renderSettings(settings) {
   renderRules(settings.rules);
   document.getElementById('blocked-start').value = settings.schedule.start;
   document.getElementById('blocked-end').value = settings.schedule.end;
-  document.getElementById('challenge-enabled').checked = settings.challengeEnabled;
 }
 
-async function runSettingsChange(action, needsChallenge, apply) {
+async function runSettingsChange(apply) {
   if (settingsChangePending) return;
   settingsChangePending = true;
   const controls = document.getElementById('blocker-settings');
@@ -107,12 +19,7 @@ async function runSettingsChange(action, needsChallenge, apply) {
   controls.disabled = true;
   error.textContent = '';
   try {
-    let settings = await loadSettings();
-    if (settings.challengeEnabled && needsChallenge(settings)) {
-      if (!await requestChallenge(action)) return;
-      // Another panel may have changed the list while the quiz was open.
-      settings = await loadSettings();
-    }
+    const settings = await loadSettings();
     await apply(settings);
   } catch (failure) {
     error.textContent = `Could not save settings: ${failure.message}`;
@@ -154,7 +61,7 @@ function isValidDomain(value) {
 }
 
 async function loadSettings() {
-  const result = await chrome.storage.sync.get([RULES_STORAGE_KEY, SCHEDULE_STORAGE_KEY, CHALLENGE_STORAGE_KEY]);
+  const result = await chrome.storage.sync.get([RULES_STORAGE_KEY, SCHEDULE_STORAGE_KEY]);
   const storedRules = Array.isArray(result[RULES_STORAGE_KEY]) ? result[RULES_STORAGE_KEY] : [];
   const schedule = result[SCHEDULE_STORAGE_KEY] || {
     start: storedRules[0] && storedRules[0].start || DEFAULT_SCHEDULE.start,
@@ -173,7 +80,7 @@ async function loadSettings() {
     });
   }
 
-  return { rules, schedule, challengeEnabled: result[CHALLENGE_STORAGE_KEY] === true };
+  return { rules, schedule };
 }
 
 async function loadRules() {
@@ -244,20 +151,16 @@ function renderRules(rules) {
 }
 
 async function toggleRule(id, enabled) {
-  await runSettingsChange('Disable blocking for this website',
-    settings => !enabled && settings.rules.some(rule => rule.id === id && rule.enabled),
-    async settings => {
-      const rule = settings.rules.find(item => item.id === id);
-      if (!rule) return;
-      rule.enabled = enabled;
-      await saveRules(settings.rules);
-    });
+  await runSettingsChange(async settings => {
+    const rule = settings.rules.find(item => item.id === id);
+    if (!rule) return;
+    rule.enabled = enabled;
+    await saveRules(settings.rules);
+  });
 }
 
 async function deleteRule(id) {
-  await runSettingsChange('Remove this website from the block list',
-    settings => settings.rules.some(rule => rule.id === id),
-    settings => saveRules(settings.rules.filter(rule => rule.id !== id)));
+  await runSettingsChange(settings => saveRules(settings.rules.filter(rule => rule.id !== id)));
 }
 
 async function addRule(domain) {
@@ -307,21 +210,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const endInput = document.getElementById('blocked-end');
   const domainInput = document.getElementById('domain-input');
   const errorEl = document.getElementById('add-error');
-  const challengeToggle = document.getElementById('challenge-enabled');
 
   document.getElementById('save-schedule-btn').addEventListener('click', async () => {
     if (!startInput.value || !endInput.value) return;
     const schedule = { start: startInput.value, end: endInput.value };
-    await runSettingsChange('Change the blocking schedule',
-      settings => settings.schedule.start !== schedule.start || settings.schedule.end !== schedule.end,
-      () => saveSchedule(schedule));
-  });
-
-  challengeToggle.addEventListener('change', async () => {
-    const enabled = challengeToggle.checked;
-    challengeToggle.checked = !enabled;
-    await runSettingsChange('Turn off challenge protection', () => !enabled,
-      () => chrome.storage.sync.set({ [CHALLENGE_STORAGE_KEY]: enabled }));
+    await runSettingsChange(() => saveSchedule(schedule));
   });
   document.getElementById('add-current-btn').addEventListener('click', addCurrentSite);
   document.getElementById('add-btn').addEventListener('click', async () => {
@@ -352,9 +245,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const next = changes[SCHEDULE_STORAGE_KEY].newValue || DEFAULT_SCHEDULE;
       startInput.value = next.start;
       endInput.value = next.end;
-    }
-    if (changes[CHALLENGE_STORAGE_KEY]) {
-      challengeToggle.checked = changes[CHALLENGE_STORAGE_KEY].newValue === true;
     }
   });
 });
