@@ -1,6 +1,7 @@
 (function () {
   const SAVED_POSTS_KEY = 'savedXPosts';
   const BUTTON_ID = 'nor1c-save-pixiv-post';
+  const MAX_PIXIV_PAGES = 1000;
   const savedPosts = new Map();
   let currentArtworkId = '';
   let artworkPromise = null;
@@ -55,13 +56,19 @@
       throw new Error(detailsPayload?.message || pagesPayload?.message || 'Could not load this Pixiv artwork.');
     }
     const details = detailsPayload.body;
-    const availablePages = pagesPayload.body
-      .map(page => normalizeImageUrl(page?.urls?.original || page?.urls?.regular || page?.urls?.small))
-      .filter(Boolean);
-    const media = availablePages
-      .slice(0, 5)
-      .map(url => ({ kind: 'image', url }));
-    if (!media.length) throw new Error('No accessible images were found for this Pixiv post.');
+    const reportedCount = details.pageCount == null ? 0 : Number(details.pageCount);
+    if (!Number.isSafeInteger(reportedCount) || reportedCount < 0) throw new Error('Pixiv returned an invalid page count. Existing saved data was kept.');
+    const totalPageCount = Math.max(pagesPayload.body.length, reportedCount);
+    if (totalPageCount > MAX_PIXIV_PAGES) throw new Error(`Pixiv posts are limited to ${MAX_PIXIV_PAGES} pages. No images were saved.`);
+    if (!totalPageCount) throw new Error('No images were found for this Pixiv post. Existing saved data was kept.');
+    const media = Array.from({ length: totalPageCount }, (_, pageIndex) => {
+      const urls = pagesPayload.body[pageIndex]?.urls || {};
+      return {
+        kind: 'image', pageIndex,
+        url: [urls.original, urls.regular, urls.small].map(normalizeImageUrl).find(Boolean) || '',
+        thumbnailUrl: [urls.thumb_mini, urls.small, urls.regular].map(normalizeImageUrl).find(Boolean) || ''
+      };
+    });
     return {
       id: post.id,
       url: post.url,
@@ -69,8 +76,7 @@
       text: [details.title || details.illustTitle, stripHtml(details.description || details.illustComment)].filter(Boolean).join('\n\n'),
       author: details.userName || '',
       createdAt: details.createDate || details.uploadDate || '',
-      media,
-      mediaNote: availablePages.length > media.length ? `Only the first ${media.length} of ${availablePages.length} images are stored.` : ''
+      media, totalPageCount, storedPageCount: media.filter(item => item.url).length, mediaListVersion: 1
     };
   }
 
@@ -91,7 +97,7 @@
         .backdrop { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; padding: 16px; overflow: hidden; overscroll-behavior: none; background: rgba(0,0,0,.45); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; line-height: 1.45; }
         .modal { width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 24px); overflow: hidden; padding: 20px; border-radius: 16px; background: #fff; color: #1f1f1f; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
         h2 { margin: 0 0 4px; font-size: 19px; } p { margin: 0 0 12px; color: #6f6f6f; }
-        .folders { display: grid; gap: 3px; max-height: min(680px, calc(100vh - 210px)); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 4px; border: 1px solid #e5e5e5; border-radius: 10px; background: #f7f7f7; }
+        .folders { display: grid; gap: 3px; max-height: min(680px, calc(100vh - 250px)); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 4px; border: 1px solid #e5e5e5; border-radius: 10px; background: #f7f7f7; }
         .folder { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 3px 10px; border: 1px solid #d6d6d6; border-radius: 6px; background: #fff; color: #1f1f1f; text-align: left; font: inherit; cursor: pointer; }
         .folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .folder-count { flex: 0 0 auto; min-width: 24px; padding: 1px 6px; border-radius: 999px; background: #f0f0f0; color: #6f6f6f; font-size: 12px; font-weight: 700; line-height: 1.3; text-align: center; }
@@ -107,6 +113,13 @@
       const selectedIds = new Set(initialFolderIds.filter(id => (result.folders || []).some(folder => folder.id === id)));
       const deleteAll = shadow.querySelector('.delete-all');
       deleteAll.hidden = !canDelete;
+      const refresh = document.createElement('button');
+      refresh.type = 'button';
+      refresh.className = 'refresh-all';
+      refresh.textContent = 'Refresh all image links';
+      refresh.hidden = !canDelete;
+      shadow.querySelector('.actions').before(refresh);
+      refresh.addEventListener('click', () => finish({ action: 'refresh' }));
       let settled = false;
       const onKeyDown = event => {
         if (event.key !== 'Escape') return;
@@ -187,7 +200,7 @@
     const button = document.getElementById(BUTTON_ID);
     if (!button || button.dataset.state === 'saving') return;
     const saved = savedPosts.get(`pixiv:${button.dataset.postId}`);
-    setButtonState(button, saved?.status === 'partial' ? 'partial' : saved ? 'saved' : 'idle');
+    setButtonState(button, saved?.status === 'partial' || (saved?.media && saved.mediaListVersion !== 1) ? 'partial' : saved ? 'saved' : 'idle');
   }
 
   async function handleSave(button, post) {
@@ -195,21 +208,30 @@
     const selection = await chooseFolder(savedFolderIds(savedPost), Boolean(savedPost));
     if (!selection) return;
     const previousState = button.dataset.state;
+    document.getElementById(`${BUTTON_ID}-error`)?.remove();
     setButtonState(button, 'saving');
     try {
       const response = selection.action === 'delete'
         ? await chrome.runtime.sendMessage({ type: 'remove-pixiv-post', id: post.id })
         : await chrome.runtime.sendMessage({
           type: 'save-pixiv-post',
-          post: { ...(await fetchArtwork(post)), folderIds: selection.folderIds },
-          retry: previousState === 'partial'
+          post: { ...(await fetchArtwork(post)), ...(selection.action === 'refresh' ? {} : { folderIds: selection.folderIds }) },
+          retry: selection.action === 'refresh' || previousState === 'partial'
         });
       if (!response?.success) throw new Error(response?.error || 'Could not save this Pixiv post.');
       if (selection.action === 'delete') savedPosts.delete(`pixiv:${post.id}`);
       else savedPosts.set(`pixiv:${post.id}`, response.post);
+      const updatedPost = savedPosts.get(`pixiv:${post.id}`);
+      setButtonState(button, updatedPost?.status === 'partial' ? 'partial' : updatedPost ? 'saved' : 'idle');
       updateButton();
     } catch (error) {
-      setButtonState(button, savedPost ? savedPost.status === 'partial' ? 'partial' : 'saved' : 'idle', error instanceof Error ? error.message : 'Could not save this Pixiv post.');
+      const message = error instanceof Error ? error.message : 'Could not save this Pixiv post.';
+      setButtonState(button, previousState, message);
+      const notice = document.createElement('span');
+      notice.id = `${BUTTON_ID}-error`;
+      notice.setAttribute('role', 'alert');
+      notice.textContent = message;
+      button.after(notice);
     }
   }
 
@@ -259,12 +281,14 @@
     let existing = document.getElementById(BUTTON_ID);
     if (!post) {
       existing?.remove();
+      document.getElementById(`${BUTTON_ID}-error`)?.remove();
       currentArtworkId = '';
       artworkPromise = null;
       return;
     }
     if (post.id !== currentArtworkId) {
       currentArtworkId = post.id;
+      document.getElementById(`${BUTTON_ID}-error`)?.remove();
       artworkPromise = null;
       existing?.remove();
       existing = null;

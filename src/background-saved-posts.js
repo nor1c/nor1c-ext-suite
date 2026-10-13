@@ -11,6 +11,7 @@
   const MAX_MEDIA_COUNT = 5;
   const store = globalThis.Nor1cSavedPosts;
   let writeQueue = Promise.resolve();
+  let pixivReferrerPromise;
 
   function serialize(task) {
     const result = writeQueue.then(task);
@@ -188,8 +189,9 @@
       post.id === canonical.id &&
       post.url === canonical.url
     );
-    if (!savedPost || !(savedPost.media || []).some(item => item?.url === url)) throw new Error('This Pixiv image is not part of the selected saved post.');
-    await ensurePixivReferrerRule();
+    if (!savedPost || !(savedPost.media || []).some(item => item?.url === url || item?.thumbnailUrl === url)) throw new Error('This Pixiv image is not part of the selected saved post.');
+    pixivReferrerPromise ||= ensurePixivReferrerRule().catch(error => { pixivReferrerPromise = null; throw error; });
+    await pixivReferrerPromise;
     return url;
   }
 
@@ -208,7 +210,8 @@
     const existing = existingIndex >= 0 ? posts[existingIndex] : null;
     const hasFolderSelection = Array.isArray(input.folderIds) || typeof input.folderId === 'string';
     const folderIds = hasFolderSelection ? validFolderIds(input.folderIds ?? input.folderId, folders, platform) : postFolderIds(existing, folders);
-    if (existing?.status === 'complete' && !retry) {
+    const pixivMedia = platform === 'pixiv' ? store.normalizePixivMedia(input) : null;
+    if (existing?.status === 'complete' && !retry && platform !== 'pixiv') {
       if (!sameFolderIds(postFolderIds(existing, folders), folderIds) || !Array.isArray(existing.folderIds)) {
         const updated = { ...existing, folderIds, updatedAt: Date.now() };
         delete updated.folderId;
@@ -220,7 +223,7 @@
     }
     if (!existing && posts.length >= MAX_POSTS) throw new Error(`Saved posts limit reached (${MAX_POSTS}). Remove a saved post first.`);
 
-    const incoming = Array.isArray(input.media) ? input.media.slice(0, MAX_MEDIA_COUNT) : [];
+    const incoming = platform === 'pixiv' ? [] : Array.isArray(input.media) ? input.media.slice(0, MAX_MEDIA_COUNT) : [];
     if (incoming.some(item => item?.kind === 'video' && !item.url)) {
       const missing = incoming.find(item => item?.kind === 'video' && !item.url);
       const source = sourceFromActivePlayback(sender.tab.id, missing?.hint);
@@ -244,7 +247,7 @@
       media.push(entry);
     }
 
-    for (const old of existing?.media || []) {
+    for (const old of platform === 'pixiv' ? [] : existing?.media || []) {
       if (!media.some(item => item.slot === old.slot)) {
         // Keep legacy local media records visible until the user replaces them.
         media.push(old);
@@ -260,17 +263,22 @@
       text: safeText(input.text, 4000),
       author: safeText(input.author, 500),
       createdAt: safeText(input.createdAt, 80),
-      savedAt: existing?.savedAt || Date.now(),
+      savedAt: existing?.savedAt ?? Date.now(),
       updatedAt: Date.now(),
       folderIds: hasFolderSelection ? folderIds : postFolderIds(existing, folders),
       status: failures.length ? 'partial' : 'complete',
       error: failures.length ? `${failures.length} media link(s) are unavailable.` : safeText(input.mediaNote, 200),
-      media
+      media,
+      ...(pixivMedia || {})
     };
 
     if (existingIndex >= 0) posts.splice(existingIndex, 1, record);
     else posts.unshift(record);
-    await chrome.storage.local.set({ [STORAGE_KEY]: posts });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEY]: posts });
+    } catch (error) {
+      throw new Error(`Could not save post. Existing saved data was kept. Storage may be full: ${error.message || 'storage write failed'}`);
+    }
 
     const obsolete = (existing?.media || []).map(item => item.mediaKey).filter(key => key && !retainedKeys.has(key));
     if (obsolete.length) await store.deleteMediaKeys(obsolete);

@@ -119,7 +119,52 @@
     }
   }
 
+  const MAX_PIXIV_PAGES = 1000;
+
+  function normalizePixivMedia(post) {
+    const input = Array.isArray(post.media) ? post.media : [];
+    const suppliedTotal = post.totalPageCount;
+    if (input.length > MAX_PIXIV_PAGES || suppliedTotal > MAX_PIXIV_PAGES) {
+      throw new Error(`Pixiv posts are limited to ${MAX_PIXIV_PAGES} pages. No images were saved.`);
+    }
+    if (suppliedTotal != null && (!Number.isSafeInteger(suppliedTotal) || suppliedTotal < 0)) {
+      throw new Error('Invalid Pixiv page count.');
+    }
+    const pages = new Map();
+    input.forEach((item, index) => {
+      const pageIndex = item?.pageIndex ?? index;
+      if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= MAX_PIXIV_PAGES || pages.has(pageIndex)) {
+        throw new Error('Invalid or duplicate Pixiv page index.');
+      }
+      const url = item?.kind === 'image' ? normalizeMediaUrl(item.url, 'image', 'pixiv') || '' : '';
+      const thumbnailUrl = item?.kind === 'image' ? normalizeMediaUrl(item.thumbnailUrl, 'image', 'pixiv') || '' : '';
+      pages.set(pageIndex, {
+        slot: `image-${pageIndex}`, pageIndex, kind: 'image',
+        status: url ? 'linked' : 'unavailable', url, thumbnailUrl,
+        hint: '', error: url ? '' : 'Image link is unavailable. Refresh all images on Pixiv.'
+      });
+    });
+    const totalPageCount = Math.max(suppliedTotal || 0, input.length, ...Array.from(pages.keys(), index => index + 1));
+    const media = Array.from({ length: totalPageCount }, (_, pageIndex) => pages.get(pageIndex) || {
+      slot: `image-${pageIndex}`, pageIndex, kind: 'image', status: 'unavailable', url: '', thumbnailUrl: '',
+      hint: '', error: 'Image link is missing. Refresh all images on Pixiv.'
+    });
+    const storedPageCount = media.filter(item => item.url).length;
+    // Old records may contain only the first five pages, even when marked complete.
+    const mediaListVersion = post.mediaListVersion === 1 ? 1 : 0;
+    const complete = mediaListVersion === 1 && totalPageCount > 0 && storedPageCount === totalPageCount;
+    return {
+      media, totalPageCount, storedPageCount, mediaListVersion,
+      status: complete ? 'complete' : 'partial',
+      error: complete ? '' : mediaListVersion !== 1
+        ? 'Legacy image list: refresh all images on Pixiv to verify the page count.'
+        : `${storedPageCount} of ${totalPageCount} image links stored. Refresh all images on Pixiv.`
+    };
+  }
+
   root.Nor1cSavedPosts = Object.freeze({
+    MAX_PIXIV_PAGES,
+    normalizePixivMedia,
     DB_NAME,
     canonicalPostUrl,
     canonicalPixivPostUrl,

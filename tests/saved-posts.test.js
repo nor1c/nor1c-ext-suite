@@ -14,8 +14,13 @@ const backupValidatorSource = savedPostsPageSource.slice(
 );
 
 function createStore() {
+  const context = { URL, Error };
+  vm.createContext(context);
+  vm.runInContext(storeSource, context);
   const media = new Map();
   return {
+    MAX_PIXIV_PAGES: context.Nor1cSavedPosts.MAX_PIXIV_PAGES,
+    normalizePixivMedia: context.Nor1cSavedPosts.normalizePixivMedia,
     media,
     canonicalPostUrl(value) {
       try {
@@ -58,6 +63,7 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
   const alarms = new Map();
   const notifications = [];
   let messageListener;
+  let storageError = '';
   let alarmListener;
   let notificationClickListener;
   const sessionRules = [];
@@ -77,6 +83,7 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
           return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, structuredClone(postsState[key] ?? value)]));
         },
         async set(values) {
+          if (storageError) throw new Error(storageError);
           for (const [key, value] of Object.entries(values)) postsState[key] = structuredClone(value);
         },
         async remove(keys) {
@@ -98,7 +105,7 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
     tabs: { async create() {} }
   };
   const context = {
-    chrome, globalThis: null, URL, AbortController, Blob, Uint8Array,
+    chrome, globalThis: null, URL, Error, AbortController, Blob, Uint8Array,
     btoa: value => Buffer.from(value, 'binary').toString('base64'),
     crypto: require('node:crypto').webcrypto,
     fetch: fetchImpl, setTimeout, clearTimeout, console,
@@ -129,6 +136,7 @@ function createBackgroundHarness(fetchImpl = async () => { throw new Error('netw
     alarms,
     notifications,
     sessionRules,
+    failWrites(message) { storageError = message; },
     fireAlarm(name) { alarmListener?.({ name }); },
     clickNotification(id) { notificationClickListener?.(id); }
   };
@@ -721,4 +729,116 @@ test('background keeps unavailable media links visible and rejects non-X senders
   assert.equal(partial.post.media[0].status, 'linked');
   assert.equal(denied.success, false);
   assert.equal(harness.postsState.savedXPosts.length, 1);
+});
+
+const pixivSender = { tab: { id: 8, url: 'https://www.pixiv.net/artworks/123' }, url: 'https://www.pixiv.net/artworks/123' };
+function pixivPost(count) {
+  return {
+    id: '123', platform: 'pixiv', url: 'https://www.pixiv.net/artworks/123',
+    totalPageCount: count, mediaListVersion: 1,
+    media: Array.from({ length: count }, (_, pageIndex) => ({
+      kind: 'image', pageIndex, url: `https://i.pximg.net/original/123_p${pageIndex}.jpg`,
+      thumbnailUrl: `https://i.pximg.net/small/123_p${pageIndex}.jpg`
+    }))
+  };
+}
+function validateBackup(payload) {
+  const context = { BACKUP_VERSION: 1, Nor1cSavedPosts: createStore(), payload, result: null };
+  vm.createContext(context);
+  vm.runInContext(`${backupValidatorSource}\nresult = validateSavedPostsBackup(payload);`, context);
+  return JSON.parse(JSON.stringify(context.result));
+}
+
+for (const count of [1, 5, 50, 200, 500, 1000]) {
+  test(`Pixiv stores and roundtrips all ${count} ordered image URLs and thumbnails without downloads`, async () => {
+    const harness = createBackgroundHarness(() => assert.fail('Saving links must not fetch image bytes'));
+    const result = await harness.send({ type: 'save-pixiv-post', post: pixivPost(count) }, pixivSender);
+    assert.equal(result.success, true);
+    assert.equal(result.post.media.length, count);
+    assert.equal(result.post.storedPageCount, count);
+    assert.equal(result.post.totalPageCount, count);
+    assert.equal(result.post.status, 'complete');
+    assert.equal(result.post.media[count - 1].pageIndex, count - 1);
+    assert.match(result.post.media[count - 1].url, new RegExp(`_p${count - 1}\.jpg$`));
+    assert.match(result.post.media[count - 1].thumbnailUrl, /\/small\//);
+    assert.equal(harness.store.media.size, 0);
+    const exported = validateBackup({ version: 1, posts: [result.post], folders: [] });
+    assert.equal(exported.version, 1);
+    assert.deepEqual(validateBackup(exported), exported);
+    assert.equal(exported.posts[0].media.length, count);
+    assert.equal(exported.posts[0].storedPageCount, count);
+  });
+}
+
+test('Pixiv missing/invalid links retain page positions and mark partial, including in backups', async () => {
+  const harness = createBackgroundHarness();
+  const post = pixivPost(5);
+  post.media[1].url = 'https://evil.example/image.jpg';
+  post.media[1].thumbnailUrl = 'https://i.pximg.net.evil.example/thumb.jpg';
+  post.media.splice(3, 1);
+  const result = await harness.send({ type: 'save-pixiv-post', post }, pixivSender);
+  assert.equal(result.success, true);
+  assert.equal(result.post.status, 'partial');
+  assert.equal(result.post.totalPageCount, 5);
+  assert.equal(result.post.storedPageCount, 3);
+  assert.equal(result.post.media[1].url, '');
+  assert.equal(result.post.media[1].thumbnailUrl, '');
+  assert.equal(result.post.media[3].status, 'unavailable');
+  assert.match(result.post.media[4].url, /p4/);
+  assert.equal(validateBackup({ version: 1, posts: [result.post], folders: [] }).posts[0].status, 'partial');
+});
+
+test('Pixiv cap rejects instead of truncating; X still stores at most five', async () => {
+  const harness = createBackgroundHarness();
+  const result = await harness.send({ type: 'save-pixiv-post', post: pixivPost(1001) }, pixivSender);
+  assert.equal(result.success, false);
+  assert.match(result.error, /1000/);
+  assert.equal(harness.postsState.savedXPosts.length, 0);
+  assert.throws(() => validateBackup({ version: 1, posts: [pixivPost(1001)], folders: [] }));
+  const x = await harness.send({ type: 'save-x-post', post: { id: '123', url: 'https://x.com/a/status/123', media: Array.from({ length: 6 }, () => ({ kind: 'image', url: 'https://pbs.twimg.com/media/test.jpg' })) } });
+  assert.equal(x.post.media.length, 5);
+});
+
+test('refresh replaces a legacy complete five-image list and preserves savedAt and folders, including a shorter authoritative list', async () => {
+  const harness = createBackgroundHarness();
+  const legacy = { ...pixivPost(5), status: 'complete', savedAt: 1234, folderIds: ['keep'], error: 'Only the first 5 of 200 images are stored.' };
+  delete legacy.mediaListVersion;
+  delete legacy.totalPageCount;
+  harness.postsState.savedXPosts = [legacy];
+  harness.postsState.savedXFolders = [{ id: 'keep', name: 'Keep', platform: 'pixiv' }];
+  const backup = validateBackup({ version: 1, posts: [legacy], folders: harness.postsState.savedXFolders });
+  assert.equal(backup.posts[0].status, 'partial');
+  assert.equal(backup.posts[0].mediaListVersion, 0);
+  const refreshed = await harness.send({ type: 'save-pixiv-post', post: pixivPost(200), retry: true }, pixivSender);
+  assert.equal(refreshed.post.media.length, 200);
+  assert.equal(refreshed.post.savedAt, 1234);
+  assert.deepEqual(Array.from(refreshed.post.folderIds), ['keep']);
+  const shorter = await harness.send({ type: 'save-pixiv-post', post: pixivPost(1), retry: true }, pixivSender);
+  assert.equal(shorter.post.media.length, 1);
+  assert.equal(shorter.post.savedAt, 1234);
+});
+
+test('quota failure keeps previous Pixiv record and returns an explicit failure', async () => {
+  const harness = createBackgroundHarness();
+  await harness.send({ type: 'save-pixiv-post', post: pixivPost(5) }, pixivSender);
+  const old = structuredClone(harness.postsState);
+  harness.failWrites('QUOTA_BYTES exceeded');
+  const result = await harness.send({ type: 'save-pixiv-post', post: pixivPost(500), retry: true }, pixivSender);
+  assert.equal(result.success, false);
+  assert.match(result.error, /Existing saved data was kept.*QUOTA_BYTES/);
+  assert.deepEqual(harness.postsState, old);
+});
+
+test('thumbnail authorization uses saved ownership and installs the referrer rule only once', async () => {
+  const harness = createBackgroundHarness();
+  const post = pixivPost(500);
+  await harness.send({ type: 'save-pixiv-post', post }, pixivSender);
+  const sender = { url: 'chrome-extension://test/saved-pixiv-posts.html' };
+  for (const item of post.media.slice(0, 4)) {
+    const allowed = await harness.send({ type: 'get-pixiv-media', artworkUrl: post.url, url: item.thumbnailUrl }, sender);
+    assert.equal(allowed.success, true);
+  }
+  const denied = await harness.send({ type: 'get-pixiv-media', artworkUrl: post.url, url: 'https://i.pximg.net/unrelated.jpg' }, sender);
+  assert.equal(denied.success, false);
+  assert.equal(harness.sessionRules.length, 1);
 });

@@ -254,6 +254,42 @@ for (const platform of ['x', 'pixiv']) {
       }, platform);
       await page.waitForSelector('#posts-list .post:nth-child(30)');
       const storedBefore = await page.evaluate(() => chrome.storage.local.get(['savedXPosts', 'savedXFolders']));
+      if (platform === 'pixiv') {
+        await page.waitForFunction(() => document.querySelector('[data-post-id="1000"] img')?.naturalWidth > 0);
+        assert.equal(await page.$$eval('[data-post-id="1004"] .media-item', nodes => nodes.length), 4);
+        assert.match(await page.$eval('[data-post-id="1004"] .pixiv-page-count', node => node.textContent), /5\/5.*\+1/);
+        assert.equal(await page.$eval('[data-post-id="broken-image"] .pixiv-refresh-link', node => node.checkVisibility()), true);
+        assert.equal(await page.$eval('.post-actions', node => node.checkVisibility()), false);
+        await page.click('[data-post-id="1000"] .media-item:nth-child(2) img');
+        await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.includes('test'));
+        assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '1 / 3');
+        assert.equal(await page.$eval('#image-viewer-prev', node => node.disabled), true);
+        await page.keyboard.press('ArrowRight');
+        await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.includes('second'));
+        await page.keyboard.press('Escape');
+        await page.click('[data-post-id="1003"] .media-item:nth-child(4) img');
+        await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.includes('image-0'));
+        assert.equal(await page.$eval('#image-viewer-prev', node => node.disabled), true);
+        await page.keyboard.press('ArrowRight');
+        await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.includes('image-1'));
+        await page.keyboard.press('Escape');
+        for (const key of ['Enter', 'Space']) {
+          await page.focus('[data-post-id="1000"] .media-item:nth-child(2) img');
+          await page.keyboard.press(key);
+          await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.includes('test'));
+          assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '1 / 3');
+          await page.keyboard.press('Escape');
+        }
+        await page.setViewport({ width: 320, height: 720 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+        assert.equal(await page.$eval('[data-post-id="1000"] .pixiv-page-count', node => node.checkVisibility()), true);
+        await page.click('#images-only-btn');
+        await page.waitForFunction(() => document.querySelector('.post-actions')?.checkVisibility());
+        assert.equal(await page.$$eval('[data-post-id="1004"] .media-item', nodes => nodes.length), 4);
+        assert.deepEqual(await page.evaluate(() => chrome.storage.local.get(['savedXPosts', 'savedXFolders'])), storedBefore);
+        assert.deepEqual(errors, []);
+        return;
+      }
       assert.equal(await page.$eval('#images-only-btn', button => button.getAttribute('aria-pressed')), 'true');
       assert.equal(await page.$eval('#images-only-btn', button => button.title), 'Show full posts');
       assert.equal(await page.$eval('#posts-list', list => list.classList.contains('images-only')), true);
@@ -527,13 +563,13 @@ for (const platform of ['x', 'pixiv']) {
       await page.click('#images-only-btn');
       await expectView(1, '2000', 30, false, folder);
       await page.click('#pagination-next');
-      await expectView(2, '2030', 1, false, folder);
+      await expectView(2, '2030', platform === 'pixiv' ? 3 : 1, false, folder);
       await page.reload();
-      await expectView(2, '2030', 1, false, folder);
+      await expectView(2, '2030', platform === 'pixiv' ? 3 : 1, false, folder);
       await page.click('[data-folder-id=""]');
       await expectView(1, '2000', 30);
       await page.evaluate(() => history.back());
-      await expectView(2, '2030', 1, false, folder);
+      await expectView(2, '2030', platform === 'pixiv' ? 3 : 1, false, folder);
       await page.evaluate(() => history.back());
       await expectView(1, '2000', 30, false, folder);
       await page.evaluate(() => history.back());
@@ -565,7 +601,7 @@ for (const platform of ['x', 'pixiv']) {
         await expectView(1, '2000', 30);
       }
       await page.goto(`${baseUrl}?page=999&view=unknown`);
-      await expectView(3, '2060', 5);
+      await expectView(3, '2060', platform === 'pixiv' ? 7 : 5);
       await page.goto(`${baseUrl}?page=2&folder=missing`);
       await expectView(1, '2000', 30);
       await page.goto(`${baseUrl}?page=2&folder=foreign`);
@@ -598,3 +634,359 @@ for (const platform of ['x', 'pixiv']) {
     }
   });
 }
+
+test('Pixiv many-page gallery bounds previews and requests, navigates complete data, and retries just one image', async () => {
+  const browser = await puppeteer.launch({ headless: false, executablePath: browserExecutable(), pipe: true, enableExtensions: [path.join(root, 'dist', 'chrome')] });
+  try {
+    const worker = await browser.waitForTarget(target => target.type() === 'service_worker' && target.url().endsWith('/background.chrome.js'));
+    const page = await browser.newPage();
+    const errors = [];
+    const requests = [];
+    let active = 0;
+    let peak = 0;
+    let failOnce = true;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setViewport({ width: 1400, height: 900 });
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (!request.url().startsWith('https://i.pximg.net/')) {
+        if (request.url().startsWith('http')) request.abort(); else request.continue();
+        return;
+      }
+      requests.push(request.url());
+      active += 1;
+      peak = Math.max(peak, active);
+      setTimeout(() => {
+        active -= 1;
+        if (failOnce && request.url() === 'https://i.pximg.net/original/500_p0.jpg') {
+          failOnce = false;
+          request.respond({ status: 503, body: '' });
+        } else request.respond({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"><rect width="60" height="90" fill="blue"/></svg>' });
+      }, 100);
+    });
+    await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/saved-pixiv-posts.html`);
+    await page.evaluate(async () => {
+      window.authorizationRequests = [];
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = message => {
+        if (message.type === 'get-pixiv-media') window.authorizationRequests.push(message.url);
+        return send(message);
+      };
+      await chrome.storage.local.set({ savedXPosts: [1, 5, 50, 200, 500].map(count => ({
+        id: String(count), platform: 'pixiv', url: `https://www.pixiv.net/artworks/${count}`,
+        totalPageCount: count, mediaListVersion: 1, folderIds: [],
+        media: Array.from({ length: count }, (_, pageIndex) => ({ kind: 'image', pageIndex,
+          url: `https://i.pximg.net/original/${count}_p${pageIndex}.jpg`, thumbnailUrl: `https://i.pximg.net/thumb/${count}_p${pageIndex}.jpg` }))
+      })) });
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.media-item img').length === 17 && [...document.querySelectorAll('.media-item img')].every(image => image.naturalWidth > 0));
+    assert.equal(requests.length, 17);
+    assert.equal(requests.every(url => url.includes('/thumb/')), true);
+    assert.ok(peak <= 4, `peak ${peak}`);
+    assert.equal(await page.evaluate(() => window.authorizationRequests.length), 17);
+    assert.equal(await page.$eval('[data-post-id="500"] .pixiv-page-count', node => node.textContent), '500/500 images · +496');
+    await page.click('[data-post-id="500"] .media-item:nth-child(4) img');
+    await page.waitForSelector('#image-viewer .pixiv-retry');
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '1 / 500');
+    const originals = requests.filter(url => url.includes('/original/'));
+    assert.equal(originals.length, 2);
+    assert.deepEqual(originals.map(url => Number(url.match(/_p(\d+)/)[1])).sort((a, b) => a - b), [0, 1]);
+    const beforeRetry = requests.length;
+    await page.click('#image-viewer .pixiv-retry');
+    await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.naturalWidth > 0);
+    assert.equal(requests.length, beforeRetry + 1);
+    assert.equal(requests.at(-1), 'https://i.pximg.net/original/500_p0.jpg');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.endsWith('500_p1.jpg'));
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '2 / 500');
+    assert.equal(await page.$$eval('#image-viewer img', images => images.length), 1);
+    // Exercise the complete 500-item data set, independently of the four preview nodes.
+    await page.evaluate(() => showViewerItem(499));
+    await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.naturalWidth > 0);
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '500 / 500');
+    assert.equal(await page.$eval('#image-viewer-next', node => node.disabled), true);
+    assert.equal(await page.evaluate(() => pixivViewerCache.size), 2);
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.endsWith('500_p498.jpg'));
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => pixivViewerCache.size), 0);
+    assert.equal(await page.$eval('#image-viewer', node => node.open), false);
+    assert.ok(peak <= 4, `peak through viewer navigation ${peak}`);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('Pixiv lazy previews have no timeout before starting and failed backup import preserves local data', async () => {
+  const browser = await puppeteer.launch({ headless: false, executablePath: browserExecutable(), pipe: true, enableExtensions: [path.join(root, 'dist', 'chrome')] });
+  try {
+    const worker = await browser.waitForTarget(target => target.type() === 'service_worker' && target.url().endsWith('/background.chrome.js'));
+    const page = await browser.newPage();
+    const requests = [];
+    await page.setViewport({ width: 1400, height: 500 });
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (request.url().startsWith('https://i.pximg.net/')) requests.push(request);
+      else if (request.url().startsWith('http')) request.abort();
+      else request.continue();
+    });
+    await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/saved-pixiv-posts.html`);
+    await page.evaluate(async () => {
+      window.imageTimeouts = 0;
+      const timeout = window.setTimeout;
+      window.setTimeout = (fn, delay, ...args) => {
+        if (delay === 15000) window.imageTimeouts += 1;
+        return timeout(fn, delay, ...args);
+      };
+      await chrome.storage.local.set({ savedXPosts: Array.from({ length: 30 }, (_, index) => ({
+        id: String(index), platform: 'pixiv', url: `https://www.pixiv.net/artworks/${index}`, mediaListVersion: 1,
+        media: Array.from({ length: 500 }, (_, pageIndex) => ({ kind: 'image', pageIndex, url: `https://i.pximg.net/${index}_p${pageIndex}.jpg` }))
+      })) });
+    });
+    await page.waitForFunction(() => window.imageTimeouts === 4);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(requests.length, 4);
+    assert.equal(await page.evaluate(() => pixivLoadsActive), 4);
+    assert.equal(await page.evaluate(() => window.imageTimeouts), 4);
+    assert.ok(await page.evaluate(() => pixivLoadQueue.length > 0));
+    assert.ok(await page.evaluate(() => pixivPreviewStarts.size > 0), 'offscreen thumbnails have not started');
+    assert.equal(await page.$$eval('#posts-list img', images => images.length), 120);
+    const original = await page.evaluate(() => chrome.storage.local.get(['savedXPosts']));
+    await page.click('#backup-btn');
+    await page.evaluate(() => {
+      chrome.storage.local.set = async () => { throw new Error('QUOTA_BYTES exceeded'); };
+      window.confirm = () => true;
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([JSON.stringify({ version: 1, posts: [], folders: [] })], 'backup.json', { type: 'application/json' }));
+      const input = document.getElementById('backup-file');
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change'));
+    });
+    await page.waitForFunction(() => document.getElementById('backup-status').dataset.state === 'error');
+    assert.match(await page.$eval('#backup-status', node => node.textContent), /QUOTA_BYTES/);
+    assert.deepEqual(await page.evaluate(() => chrome.storage.local.get(['savedXPosts'])), original);
+  } finally { await browser.close(); }
+});
+
+test('Pixiv thumbnail centers open the first image at responsive widths, retries remain clickable, and failed viewer focus survives navigation', async () => {
+  const browser = await puppeteer.launch({ headless: false, executablePath: browserExecutable(), pipe: true, enableExtensions: [path.join(root, 'dist', 'chrome')] });
+  try {
+    const worker = await browser.waitForTarget(target => target.type() === 'service_worker' && target.url().endsWith('/background.chrome.js'));
+    const page = await browser.newPage();
+    const requests = [];
+    const errors = [];
+    const failures = new Set();
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setCacheEnabled(false);
+    await page.setViewport({ width: 1400, height: 900 });
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (request.url().startsWith('https://i.pximg.net/')) {
+        requests.push(request.url());
+        if (failures.delete(request.url())) request.respond({ status: 503, body: '' });
+        else request.respond({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"></svg>' });
+      } else if (request.url().startsWith('http')) request.abort();
+      else request.continue();
+    });
+    await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/saved-pixiv-posts.html`);
+    await page.evaluate(async () => {
+      await chrome.storage.local.set({ savedXPosts: [{
+        id: '500', platform: 'pixiv', url: 'https://www.pixiv.net/artworks/500', mediaListVersion: 1, totalPageCount: 500,
+        media: Array.from({ length: 500 }, (_, pageIndex) => ({ kind: 'image', pageIndex,
+          url: `https://i.pximg.net/original/500_p${pageIndex}.jpg`, thumbnailUrl: `https://i.pximg.net/thumb/500_p${pageIndex}.jpg` }))
+      }] });
+    });
+    const waitForPreviews = () => page.waitForFunction(() => {
+      const images = [...document.querySelectorAll('#posts-list .media-item img')];
+      return images.length === 4 && images.every(image => image.naturalWidth > 0);
+    });
+    const centerHit = selector => page.$eval(selector, node => {
+      const bounds = node.getBoundingClientRect();
+      const cell = node.closest('.media-item').getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      return { x, y, hit: document.elementFromPoint(x, y) === node,
+        contained: bounds.left >= cell.left && bounds.right <= cell.right && bounds.top >= cell.top && bounds.bottom <= cell.bottom };
+    });
+    for (const full of [false, true]) {
+      if (full) {
+        await page.click('#images-only-btn');
+        await page.waitForFunction(() => document.querySelector('.post-actions')?.checkVisibility());
+      }
+      await waitForPreviews();
+      for (const width of [1400, 900, 720, 600, 320]) {
+        await page.setViewport({ width, height: 900 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+        const layout = await page.$eval('.pixiv-post', card => {
+          const grid = card.querySelector('.media-grid').getBoundingClientRect();
+          const controls = card.querySelector('.pixiv-preview-controls').getBoundingClientRect();
+          return { width: card.getBoundingClientRect().width, separated: grid.bottom <= controls.top, height: grid.height };
+        });
+        assert.ok(layout.width >= 220 && layout.height >= 100 && layout.separated, `${width}px full=${full}: ${JSON.stringify(layout)}`);
+        for (let index = 0; index < 4; index += 1) {
+          const selector = `.media-item:nth-child(${index + 1}) img`;
+          const center = await centerHit(selector);
+          assert.equal(center.hit, true, `${width}px full=${full} thumbnail ${index + 1} center`);
+          await page.mouse.click(center.x, center.y);
+          await page.waitForFunction(() => document.querySelector('#image-viewer .viewer-image')?.src.endsWith('500_p0.jpg'));
+          assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '1 / 500');
+          await page.keyboard.press('Escape');
+        }
+      }
+      for (const width of [1400, 320]) {
+        await page.setViewport({ width, height: 900 });
+        // A fresh URL avoids Chromium reusing the already-decoded thumbnail across rerenders.
+        const retryUrl = `https://i.pximg.net/thumb/500_p0.jpg?attempt=${full}-${width}`;
+        failures.add(retryUrl);
+        await page.evaluate(async retryUrl => {
+          const { savedXPosts } = await chrome.storage.local.get('savedXPosts');
+          savedXPosts[0].media[0].thumbnailUrl = retryUrl;
+          await chrome.storage.local.set({ savedXPosts });
+        }, retryUrl);
+        await page.waitForSelector('#posts-list .pixiv-retry');
+        await page.waitForFunction(() => [...document.querySelectorAll('#posts-list img')].every(image => image.naturalWidth > 0) && pixivLoadsActive === 0);
+        const center = await centerHit('#posts-list .pixiv-retry');
+        assert.equal(center.hit && center.contained, true, `${width}px full=${full} retry is visible and clickable`);
+        assert.match(await page.$eval('#posts-list .pixiv-retry', node => node.getAttribute('aria-label')), /Image could not be loaded/);
+        const before = requests.length;
+        await page.mouse.click(center.x, center.y);
+        await waitForPreviews();
+        assert.equal(requests.length, before + 1);
+        assert.equal(requests.at(-1), retryUrl);
+        assert.equal(await page.$eval('#image-viewer', node => node.open), false);
+      }
+    }
+    failures.add('https://i.pximg.net/original/500_p0.jpg?failure');
+    await page.evaluate(async () => {
+      const { savedXPosts } = await chrome.storage.local.get('savedXPosts');
+      savedXPosts[0].media[0].url += '?failure';
+      await chrome.storage.local.set({ savedXPosts });
+      await renderQueue;
+    });
+    await waitForPreviews();
+    await page.click('.media-item img');
+    await page.waitForSelector('#image-viewer .pixiv-retry');
+    await page.focus('#image-viewer .pixiv-retry');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '2 / 500');
+    assert.equal(await page.evaluate(() => document.activeElement === document.getElementById('image-viewer')), true);
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '3 / 500');
+    await page.keyboard.press('Escape');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('Pixiv controlled timeout releases a slot; late authorization and load callbacks cannot restore cancelled viewer frames', async () => {
+  const browser = await puppeteer.launch({ headless: false, executablePath: browserExecutable(), pipe: true, enableExtensions: [path.join(root, 'dist', 'chrome')] });
+  try {
+    const worker = await browser.waitForTarget(target => target.type() === 'service_worker' && target.url().endsWith('/background.chrome.js'));
+    const page = await browser.newPage();
+    const requests = [];
+    const errors = [];
+    let holdRequests = true;
+    const respond = request => request.respond({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"></svg>' });
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setViewport({ width: 1400, height: 900 });
+    await page.setCacheEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      if (request.url().startsWith('https://i.pximg.net/')) {
+        requests.push(request);
+        if (!holdRequests) respond(request);
+      } else if (request.url().startsWith('http')) request.abort();
+      else request.continue();
+    });
+    await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/saved-pixiv-posts.html`);
+    await page.evaluate(async () => {
+      window.imageTimers = new Map();
+      let timerId = -1;
+      const timeout = window.setTimeout.bind(window);
+      const clear = window.clearTimeout.bind(window);
+      window.setTimeout = (fn, delay, ...args) => {
+        if (delay !== 15000) return timeout(fn, delay, ...args);
+        const id = timerId--;
+        window.imageTimers.set(id, () => { window.imageTimers.delete(id); fn(...args); });
+        return id;
+      };
+      window.clearTimeout = id => { if (!window.imageTimers.delete(id)) clear(id); };
+      window.authorizationRequests = [];
+      window.pendingAuthorizations = [];
+      window.loadPeak = 0;
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = message => {
+        if (message.type !== 'get-pixiv-media') return send(message);
+        window.authorizationRequests.push(message.url);
+        window.loadPeak = Math.max(window.loadPeak, pixivLoadsActive);
+        const response = { success: true, url: message.url };
+        if (message.url.includes('/original/')) return new Promise(resolve => window.pendingAuthorizations.push({ url: message.url, resolve: () => resolve(response) }));
+        return Promise.resolve(response);
+      };
+      await chrome.storage.local.set({ savedXPosts: [500, 501].map(id => ({
+        id: String(id), platform: 'pixiv', url: `https://www.pixiv.net/artworks/${id}`, mediaListVersion: 1, totalPageCount: 500,
+        media: Array.from({ length: 500 }, (_, pageIndex) => ({ kind: 'image', pageIndex,
+          url: `https://i.pximg.net/original/${id}_p${pageIndex}.jpg`, thumbnailUrl: `https://i.pximg.net/thumb/${id}_p${pageIndex}.jpg` }))
+      })) });
+    });
+    await page.waitForFunction(() => imageTimers.size === 4);
+    await page.waitForFunction(() => authorizationRequests.length === 4);
+    assert.equal(await page.evaluate(() => pixivLoadQueue.length), 4);
+    await page.evaluate(() => imageTimers.values().next().value());
+    await page.waitForSelector('#posts-list .pixiv-retry');
+    await page.waitForFunction(() => authorizationRequests.length === 5 && imageTimers.size === 4);
+    assert.equal(await page.evaluate(() => pixivLoadsActive), 4, 'timeout frees a slot for the fifth thumbnail');
+    assert.match(await page.$eval('#posts-list .pixiv-retry', node => node.title), /timed out/);
+    await page.click('#posts-list .pixiv-retry');
+    holdRequests = false;
+    // Release admitted requests; Chrome may have already cancelled the timed-out request.
+    await Promise.all(requests.map(request => respond(request).catch(() => {})));
+    await page.waitForFunction(() => [...document.querySelectorAll('#posts-list img')].length === 8 && [...document.querySelectorAll('#posts-list img')].every(image => image.naturalWidth > 0) && pixivLoadsActive === 0);
+    const authorizations = await page.evaluate(() => authorizationRequests);
+    assert.equal(authorizations.length, 9);
+    assert.equal(authorizations.filter(url => url === authorizations[0]).length, 2, 'only the timed-out thumbnail retries');
+    assert.equal(await page.evaluate(() => imageTimers.size), 0);
+
+    holdRequests = true;
+    await page.click('[data-post-id="500"] .media-item:nth-child(4) img');
+    await page.waitForFunction(() => pendingAuthorizations.length === 2);
+    await page.evaluate(() => {
+      window.oldFrames = [...pixivViewerCache.values()].map(entry => entry.frame);
+      showViewerItem(9);
+    });
+    await page.waitForFunction(() => pendingAuthorizations.length === 4);
+    assert.equal(await page.evaluate(() => pixivLoadsActive), 4);
+    assert.equal(requests.filter(request => request.url().includes('/original/')).length, 0);
+    await page.evaluate(() => pendingAuthorizations.splice(0, 2).forEach(job => job.resolve()));
+    await page.waitForFunction(() => pendingAuthorizations.length === 3);
+    assert.equal(await page.evaluate(() => oldFrames.every(frame => !frame.isConnected && !frame.querySelector('img').hasAttribute('src'))), true);
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '10 / 500');
+    await page.evaluate(() => pendingAuthorizations.shift().resolve());
+    await page.waitForFunction(() => imageTimers.size === 1);
+    await page.evaluate(() => {
+      window.cancelledFrame = pixivViewerCache.get(9).frame;
+      window.cancelledImage = cancelledFrame.querySelector('img');
+      window.lateLoad = cancelledImage.onload;
+      showViewerItem(19);
+      lateLoad();
+    });
+    await page.waitForFunction(() => pendingAuthorizations.length === 4);
+    assert.equal(await page.evaluate(() => pixivLoadsActive), 4);
+    assert.equal(await page.evaluate(() => !cancelledFrame.isConnected && !cancelledImage.hasAttribute('src') && !cancelledImage.onload && !cancelledImage.onerror && !cancelledFrame.querySelector('.pixiv-retry')), true);
+    assert.equal(await page.$eval('.viewer-counter', node => node.textContent), '20 / 500');
+    await page.evaluate(() => pendingAuthorizations.splice(0, 2).forEach(job => job.resolve()));
+    await page.waitForFunction(() => pendingAuthorizations.length === 3);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => {
+      pendingAuthorizations.splice(0).forEach(job => job.resolve());
+      lateLoad();
+    });
+    await page.waitForFunction(() => pixivLoadsActive === 0 && pixivLoadQueue.length === 0);
+    const originalRequests = requests.filter(request => request.url().includes('/original/'));
+    assert.deepEqual(originalRequests.map(request => request.url()), ['https://i.pximg.net/original/500_p9.jpg']);
+    await Promise.all(originalRequests.map(request => respond(request).catch(() => {})));
+    assert.deepEqual(await page.evaluate(() => ({
+      open: imageViewer.open, children: imageViewerMedia.childElementCount, cache: pixivViewerCache.size,
+      timers: imageTimers.size, peak: loadPeak, oldSource: cancelledImage.hasAttribute('src')
+    })), { open: false, children: 0, cache: 0, timers: 0, peak: 4, oldSource: false });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

@@ -34,6 +34,12 @@ async function withPixivSaveButton(run, saved = false, html = '') {
       } else request.abort();
     });
     await page.evaluateOnNewDocument(saved => {
+      const attachShadow = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function (options) {
+        const shadow = attachShadow.call(this, options);
+        if (this.classList.contains('nor1c-pixiv-folder-modal-host')) window.folderModalShadow = shadow;
+        return shadow;
+      };
       const posts = saved ? [{ id: '117787622', platform: 'pixiv', status: 'complete', folderIds: [] }] : [];
       window.sentMessages = [];
       window.chrome = {
@@ -176,6 +182,89 @@ test('Pixiv Save binds to the new artwork after in-page navigation', async () =>
   }, true);
 });
 
+const saveOutcomes = [
+  { name: 'new save', saved: false, action: 'save', status: 'complete', expected: 'saved' },
+  { name: 'folder edit', saved: true, action: 'save', status: 'complete', expected: 'saved' },
+  { name: 'partial save', saved: false, action: 'save', status: 'partial', expected: 'partial' },
+  { name: 'delete', saved: true, action: 'delete', expected: 'idle' },
+  { name: 'failed save', saved: false, action: 'save', error: 'Save failed', expected: 'idle' },
+  { name: 'failed folder edit', saved: true, action: 'save', error: 'Save failed', expected: 'saved' },
+  { name: 'failed delete', saved: true, action: 'delete', error: 'Delete failed', expected: 'saved' }
+];
+
+for (const outcome of saveOutcomes) {
+  test(`Pixiv Save leaves loading after ${outcome.name}`, async () => {
+    await withPixivSaveButton(async page => {
+      await page.evaluate(({ outcome, imageUrl }) => {
+        document.getElementById('nor1c-save-pixiv-post').style.transition = 'none';
+        window.fetch = async url => ({
+          ok: true,
+          json: async () => ({
+            error: false,
+            body: url.endsWith('/pages')
+              ? [{ urls: { original: imageUrl } }]
+              : { title: 'Test artwork', userName: 'Test artist' }
+          })
+        });
+        const sendMessage = chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage = message => {
+          if (message.type !== 'save-pixiv-post' && message.type !== 'remove-pixiv-post') return sendMessage(message);
+          window.sentMessages.push(message);
+          return new Promise(resolve => {
+            const post = { ...message.post, status: outcome.status };
+            window.notifyStorage = () => {
+              if (!outcome.error) window.storageListener({
+                savedXPosts: { newValue: outcome.action === 'delete' ? [] : [post] }
+              }, 'local');
+            };
+            window.finishSave = () => resolve(outcome.error
+              ? { success: false, error: outcome.error }
+              : { success: true, post });
+          });
+        };
+      }, { outcome, imageUrl: IMAGE_URL });
+
+      await page.click('#nor1c-save-pixiv-post');
+      await page.waitForSelector('.nor1c-pixiv-folder-modal-host');
+      await page.evaluate(action => {
+        window.folderModalShadow.querySelector(action === 'delete' ? '.delete-all' : '.confirm').click();
+      }, outcome.action);
+      await page.waitForFunction(() => typeof window.finishSave === 'function');
+      await page.evaluate(() => window.notifyStorage());
+      assert.deepEqual(await page.$eval('#nor1c-save-pixiv-post', button => ({
+        state: button.dataset.state, disabled: button.disabled, loading: Boolean(button.querySelector('circle'))
+      })), { state: 'saving', disabled: true, loading: true });
+
+      await page.evaluate(() => window.finishSave());
+      await page.waitForFunction(() => document.getElementById('nor1c-save-pixiv-post').dataset.state !== 'saving', { timeout: 1500 });
+      const state = await page.$eval('#nor1c-save-pixiv-post', button => ({
+        state: button.dataset.state,
+        disabled: button.disabled,
+        loading: Boolean(button.querySelector('circle')),
+        checkVisible: getComputedStyle(button.querySelector('.saved-check')).display !== 'none',
+        color: getComputedStyle(button).color,
+        title: button.title,
+        label: button.getAttribute('aria-label')
+      }));
+      assert.equal(state.state, outcome.expected);
+      assert.equal(state.disabled, false);
+      assert.equal(state.loading, false);
+      assert.equal(state.checkVisible, outcome.expected === 'saved');
+      if (outcome.expected === 'saved') assert.equal(state.color, 'rgb(24, 160, 88)');
+      assert.ok(state.title);
+      assert.equal(state.label, state.title);
+      assert.equal(await page.evaluate(() => window.sentMessages.at(-1).type), outcome.action === 'delete' ? 'remove-pixiv-post' : 'save-pixiv-post');
+      await page.evaluate(() => window.notifyStorage());
+      assert.equal(await page.$eval('#nor1c-save-pixiv-post', button => button.dataset.state), outcome.expected);
+
+      await page.click('#nor1c-save-pixiv-post');
+      await page.waitForSelector('.nor1c-pixiv-folder-modal-host');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.nor1c-pixiv-folder-modal-host', { hidden: true });
+    }, outcome.saved);
+  });
+}
+
 test('Pixiv Save mounting settles without repeatedly rewriting its own button', async () => {
   await withPixivSaveButton(async page => {
     const changes = await page.evaluate(async () => {
@@ -251,4 +340,83 @@ test('Chrome displays authorized Pixiv media with the Pixiv referrer rule', { sk
   } finally {
     await browser.close();
   }
+});
+
+for (const count of [1, 5, 50, 200, 500]) {
+  test(`Pixiv AJAX save collects all ${count} ordered links and thumbnails`, async () => {
+    await withPixivSaveButton(async page => {
+      await page.evaluate(count => {
+        window.fetch = async url => ({ ok: true, json: async () => ({ error: false, body: url.endsWith('/pages')
+          ? Array.from({ length: count }, (_, index) => ({ urls: { original: `https://i.pximg.net/original/p${index}.jpg`, small: `https://i.pximg.net/thumb/p${index}.jpg` } }))
+          : { title: 'Many pages', pageCount: count } }) });
+        const send = chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage = async message => {
+          if (message.type !== 'save-pixiv-post') return send(message);
+          window.sentMessages.push(message);
+          return { success: true, post: { ...message.post, status: 'complete' } };
+        };
+      }, count);
+      await page.click('#nor1c-save-pixiv-post');
+      await page.evaluate(() => window.folderModalShadow.querySelector('.confirm').click());
+      await page.waitForFunction(() => document.querySelector('#nor1c-save-pixiv-post').dataset.state === 'saved');
+      const post = await page.evaluate(() => window.sentMessages.at(-1).post);
+      assert.equal(post.media.length, count);
+      assert.equal(post.totalPageCount, count);
+      assert.equal(post.storedPageCount, count);
+      assert.equal(post.mediaListVersion, 1);
+      assert.equal(post.media.at(-1).pageIndex, count - 1);
+      assert.equal(post.media.at(-1).thumbnailUrl, `https://i.pximg.net/thumb/p${count - 1}.jpg`);
+    });
+  });
+}
+
+test('Pixiv refresh-all action omits folder changes and preserves invalid/missing page positions', async () => {
+  await withPixivSaveButton(async page => {
+    await page.evaluate(() => {
+      window.storageListener({ savedXPosts: { newValue: [{ id: '117787622', platform: 'pixiv', status: 'complete', media: Array(5).fill({ kind: 'image' }), folderIds: ['keep'] }] } }, 'local');
+      window.fetch = async url => ({ ok: true, json: async () => ({ error: false, body: url.endsWith('/pages')
+        ? [{ urls: { original: 'https://i.pximg.net/p0.jpg' } }, { urls: { original: 'https://evil.example/p1.jpg' } }]
+        : { pageCount: 3 } }) });
+      const send = chrome.runtime.sendMessage;
+      chrome.runtime.sendMessage = async message => {
+        if (message.type !== 'save-pixiv-post') return send(message);
+        window.sentMessages.push(message);
+        return { success: true, post: { ...message.post, status: 'partial', folderIds: ['keep'] } };
+      };
+    });
+    assert.equal(await page.$eval('#nor1c-save-pixiv-post', button => button.dataset.state), 'partial');
+    await page.click('#nor1c-save-pixiv-post');
+    await page.evaluate(() => window.folderModalShadow.querySelector('.refresh-all').click());
+    await page.waitForFunction(() => window.sentMessages.some(message => message.type === 'save-pixiv-post'));
+    const message = await page.evaluate(() => window.sentMessages.at(-1));
+    assert.equal(message.retry, true);
+    assert.equal('folderIds' in message.post, false);
+    assert.equal(message.post.totalPageCount, 3);
+    assert.equal(message.post.storedPageCount, 1);
+    assert.deepEqual(message.post.media.map(item => item.url), ['https://i.pximg.net/p0.jpg', '', '']);
+    assert.equal(await page.$eval('#nor1c-save-pixiv-post', button => button.dataset.state), 'partial');
+  }, true);
+});
+
+test('Pixiv rejects over-cap AJAX lists and displays quota failure without a success state', async () => {
+  await withPixivSaveButton(async page => {
+    await page.evaluate(() => {
+      window.fetch = async url => ({ ok: true, json: async () => ({ body: url.endsWith('/pages') ? [{ urls: { original: 'https://i.pximg.net/p0.jpg' } }] : { pageCount: 1001 } }) });
+    });
+    await page.click('#nor1c-save-pixiv-post');
+    await page.evaluate(() => window.folderModalShadow.querySelector('.confirm').click());
+    await page.waitForSelector('#nor1c-save-pixiv-post-error');
+    assert.match(await page.$eval('#nor1c-save-pixiv-post-error', node => node.textContent), /1000/);
+    assert.equal(await page.evaluate(() => window.sentMessages.some(message => message.type === 'save-pixiv-post')), false);
+    await page.evaluate(() => {
+      window.fetch = async url => ({ ok: true, json: async () => ({ body: url.endsWith('/pages') ? [{ urls: { original: 'https://i.pximg.net/p0.jpg' } }] : { pageCount: 1 } }) });
+      const send = chrome.runtime.sendMessage;
+      chrome.runtime.sendMessage = message => message.type === 'save-pixiv-post'
+        ? Promise.resolve({ success: false, error: 'Storage quota exceeded. Existing saved data was kept.' }) : send(message);
+    });
+    await page.click('#nor1c-save-pixiv-post');
+    await page.evaluate(() => window.folderModalShadow.querySelector('.confirm').click());
+    await page.waitForFunction(() => document.querySelector('#nor1c-save-pixiv-post-error')?.textContent.includes('quota'));
+    assert.equal(await page.$eval('#nor1c-save-pixiv-post', button => button.dataset.state), 'idle');
+  });
 });

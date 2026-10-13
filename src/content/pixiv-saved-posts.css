@@ -51,3 +51,5 @@
 #nor1c-save-pixiv-post[data-state="saved"] .saved-check { display: inline; }
 #nor1c-save-pixiv-post[data-state="partial"] { background: #fff4df; color: #b45309; }
 #nor1c-save-pixiv-post:disabled { opacity: .65; cursor: wait; }
+
+#nor1c-save-pixiv-post-error { display: block; max-width: 360px; padding: 6px; color: #b42318; font-size: 12px; }

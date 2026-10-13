@@ -10,6 +10,7 @@ let imagesOnly = true;
 const imagesOnlyButton = document.getElementById('images-only-btn');
 const mediaUrls = new Set();
 const imageViewer = document.getElementById('image-viewer');
+imageViewer.tabIndex = -1;
 const imageViewerClose = document.getElementById('image-viewer-close');
 const imageViewerMedia = document.getElementById('image-viewer-media');
 const imageViewerPrev = document.getElementById('image-viewer-prev');
@@ -38,6 +39,120 @@ let didPan = false;
 let renderQueue = Promise.resolve();
 let renderVersion = 0;
 let localMutationDepth = 0;
+const pixivLoadQueue = [];
+let pixivLoadsActive = 0;
+const pixivPreviewJobs = new Set();
+const pixivPreviewStarts = new Map();
+const pixivViewerCache = new Map();
+const viewerCounter = document.createElement('span');
+viewerCounter.className = 'viewer-counter';
+viewerCounter.setAttribute('aria-live', 'polite');
+imageViewer.appendChild(viewerCounter);
+
+// Both thumbnails and originals share this four-request budget. A queued image has no timeout.
+function loadPixivImage(image, url, artworkUrl, onError, priority = false) {
+  const job = { cancelled: false, stop: null, cancel() {
+    this.cancelled = true;
+    this.stop?.();
+    image.removeAttribute('src');
+  } };
+  job.run = async () => {
+    try {
+      if (!url) throw new Error('Image link is unavailable. Refresh all images on Pixiv.');
+      const response = await chrome.runtime.sendMessage({ type: 'get-pixiv-media', url, artworkUrl });
+      if (job.cancelled) return;
+      if (!response?.success || response.url !== url) throw new Error(response?.error || 'Pixiv image could not be authorized.');
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = error => {
+          clearTimeout(timer);
+          image.onload = null;
+          image.onerror = null;
+          job.stop = null;
+          if (error) reject(error); else resolve();
+        };
+        job.stop = () => finish();
+        image.onload = () => finish(image.naturalWidth ? null : new Error('Image could not be decoded.'));
+        image.onerror = () => finish(new Error('Image could not be loaded.'));
+        // Start immediately once admitted by the visibility observer and request queue.
+        image.loading = 'eager';
+        image.src = url;
+        timer = setTimeout(() => finish(new Error('Image load timed out. Retry this image.')), 15000);
+      });
+    } catch (error) {
+      image.removeAttribute('src');
+      if (!job.cancelled) onError(error.message);
+    }
+  };
+  if (priority) pixivLoadQueue.unshift(job); else pixivLoadQueue.push(job);
+  pumpPixivLoads();
+  return job;
+}
+
+function pumpPixivLoads() {
+  while (pixivLoadsActive < 4 && pixivLoadQueue.length) {
+    const job = pixivLoadQueue.shift();
+    if (job.cancelled) continue;
+    pixivLoadsActive += 1;
+    job.run().finally(() => { pixivLoadsActive -= 1; pumpPixivLoads(); });
+  }
+}
+
+const pixivPreviewObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const start = pixivPreviewStarts.get(entry.target);
+    pixivPreviewStarts.delete(entry.target);
+    pixivPreviewObserver.unobserve(entry.target);
+    start?.();
+  }
+});
+
+function clearPixivPreviews() {
+  pixivPreviewObserver.disconnect();
+  pixivPreviewStarts.clear();
+  for (const job of pixivPreviewJobs) job.cancel();
+  pixivPreviewJobs.clear();
+}
+
+function clearPixivViewer() {
+  for (const entry of pixivViewerCache.values()) entry.job?.cancel();
+  pixivViewerCache.clear();
+}
+
+function showPixivViewerItem(index) {
+  const wanted = [index, index + 1, index - 1].filter(value => value >= 0 && value < viewerItems.length);
+  for (const [key, entry] of pixivViewerCache) {
+    if (wanted.includes(key)) continue;
+    entry.job?.cancel();
+    pixivViewerCache.delete(key);
+  }
+  for (const key of wanted) {
+    if (pixivViewerCache.has(key)) continue;
+    const item = viewerItems[key];
+    const frame = element('div', 'pixiv-viewer-frame');
+    const entry = { frame, job: null };
+    pixivViewerCache.set(key, entry);
+    const start = () => {
+      if (frame.contains(document.activeElement)) imageViewer.focus();
+      entry.job?.cancel();
+      const image = element('img', 'viewer-image');
+      image.alt = `Pixiv page ${item.pageIndex + 1}`;
+      frame.replaceChildren(image);
+      entry.job = loadPixivImage(image, item.src, item.artworkUrl, message => {
+        const retry = element('button', 'pixiv-retry', 'Retry this image');
+        retry.type = 'button';
+        retry.addEventListener('click', start);
+        frame.replaceChildren(element('p', 'pixiv-image-error', message), retry);
+      }, key === index);
+    };
+    start();
+  }
+  const active = pixivViewerCache.get(index);
+  const queuedIndex = pixivLoadQueue.indexOf(active.job);
+  if (queuedIndex > 0) pixivLoadQueue.unshift(...pixivLoadQueue.splice(queuedIndex, 1));
+  imageViewerMedia.replaceChildren(active.frame);
+}
 
 function applyImageTransform() {
   const image = imageViewerMedia.querySelector('.viewer-image');
@@ -57,6 +172,7 @@ function resetImageTransform() {
   applyImageTransform();
 }
 function closeImageViewer() {
+  clearPixivViewer();
   if (imageViewer.open) imageViewer.close();
   imageViewerMedia.replaceChildren();
   viewerIndex = -1;
@@ -70,12 +186,27 @@ function updateViewerNavigation() {
   imageViewerNext.disabled = !hasNext;
   imageViewerPrev.hidden = !imageViewer.open || viewerItems.length < 2;
   imageViewerNext.hidden = !imageViewer.open || viewerItems.length < 2;
+  const isPixiv = viewerItems[viewerIndex]?.platform === 'pixiv';
+  viewerCounter.hidden = !isPixiv;
+  viewerCounter.textContent = isPixiv ? `${viewerIndex + 1} / ${viewerItems.length}` : '';
+  imageViewerPrev.title = isPixiv ? 'Previous image' : 'Previous saved post';
+  imageViewerNext.title = isPixiv ? 'Next image' : 'Next saved post';
+  imageViewerPrev.setAttribute('aria-label', imageViewerPrev.title);
+  imageViewerNext.setAttribute('aria-label', imageViewerNext.title);
 }
 
 function showViewerItem(index) {
   if (index < 0 || index >= viewerItems.length) return;
+  if (imageViewerMedia.contains(document.activeElement)) imageViewer.focus();
   imageViewerMedia.replaceChildren();
   const item = viewerItems[index];
+  if (item.platform === 'pixiv') {
+    showPixivViewerItem(index);
+    viewerIndex = index;
+    resetImageTransform();
+    updateViewerNavigation();
+    return;
+  }
   let content;
   if (item.kind === 'video') {
     content = element('video', 'viewer-video');
@@ -104,6 +235,7 @@ function showViewerItem(index) {
 }
 
 function openImageViewer(items, index) {
+  clearPixivViewer();
   viewerItems = items;
   showViewerItem(index);
   imageViewer.showModal();
@@ -172,7 +304,7 @@ const stopPan = event => {
 imageViewerMedia.addEventListener('pointerup', stopPan);
 imageViewerMedia.addEventListener('pointercancel', stopPan);
 imageViewer.addEventListener('click', event => {
-  if (event.target.closest('.viewer-nav, .image-viewer-close')) return;
+  if (event.target.closest('.viewer-nav, .image-viewer-close, .pixiv-retry, .pixiv-image-error, .viewer-counter')) return;
   const media = imageViewerMedia.querySelector('.viewer-image, .viewer-video');
   const bounds = media?.getBoundingClientRect();
   const outsideMedia = !bounds || event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
@@ -299,9 +431,10 @@ function validateSavedPostsBackup(payload) {
           : post.folderIds;
     const postKey = `${platform}:${canonical?.id || ''}`;
     if (!canonical || canonical.id !== String(post.id) || postIds.has(postKey) || !Array.isArray(mediaInput) || !Array.isArray(folderInput)) throw new Error('Backup contains an invalid saved post.');
-    if (mediaInput.length > 5 || folderInput.some(id => typeof id !== 'string')) throw new Error('Backup contains an invalid saved post.');
+    if (mediaInput.length > (platform === 'pixiv' ? Nor1cSavedPosts.MAX_PIXIV_PAGES : 5) || folderInput.some(id => typeof id !== 'string')) throw new Error('Backup contains an invalid saved post.');
     postIds.add(postKey);
-    const media = mediaInput.map((item, index) => {
+    const pixivMedia = platform === 'pixiv' ? Nor1cSavedPosts.normalizePixivMedia(post) : null;
+    const media = pixivMedia?.media || mediaInput.map((item, index) => {
       if (!item || !['image', 'video'].includes(item.kind)) throw new Error('Backup contains invalid media metadata.');
       const url = item.url ? Nor1cSavedPosts.normalizeMediaUrl(item.url, item.kind, platform) : '';
       if (item.url && !url) throw new Error('Backup contains an invalid media URL.');
@@ -323,10 +456,11 @@ function validateSavedPostsBackup(payload) {
       folderIds: [...new Set(folderInput.filter(id => folderIds.has(id) && folderPlatforms.get(id) === platform))],
       status: failures ? 'partial' : 'complete',
       error: failures ? `${failures} media link(s) are unavailable.` : '',
-      media
+      media,
+      ...(pixivMedia || {})
     };
   });
-  return { posts, folders };
+  return { version: BACKUP_VERSION, posts, folders };
 }
 
 async function updateLastBackupLabel() {
@@ -370,7 +504,7 @@ backupFile.addEventListener('change', async () => {
   backupFile.value = '';
   if (!file) return;
   try {
-    if (file.size > 10 * 1024 * 1024) throw new Error('Backup file is too large.');
+    if (file.size > 50 * 1024 * 1024) throw new Error('Backup file is too large (maximum 50 MB).');
     const restored = validateSavedPostsBackup(JSON.parse(await file.text()));
     if (!window.confirm(`Replace local data with ${restored.posts.length} post(s) and ${restored.folders.length} folder(s)?`)) return;
     await chrome.storage.local.set({ [STORAGE_KEY]: restored.posts, [FOLDERS_KEY]: restored.folders });
@@ -432,7 +566,7 @@ function renderPagination(totalItems) {
 function updateEmptyState() {
   const empty = document.getElementById('empty-state');
   const list = document.getElementById('posts-list');
-  empty.hidden = Boolean(list.querySelector(imagesOnly ? '.media-item img' : '.post'));
+  empty.hidden = Boolean(list.querySelector(imagesOnly ? '.media-item img, .pixiv-post' : '.post'));
   empty.textContent = imagesOnly
     ? 'No images available in this view. Turn off Images only to see all saved posts.'
     : activePlatform === 'pixiv' ? 'No saved Pixiv posts yet.' : 'No saved posts yet.';
@@ -464,11 +598,12 @@ async function renderPostsOnce(version) {
       currentPage = 1;
     }
     const folderPosts = activeFolderId ? platformPosts.filter(post => postFolderIds(post).includes(activeFolderId)) : platformPosts;
-    const visiblePosts = imagesOnly ? folderPosts.filter(post => post.media?.some(item => item.kind === 'image')) : folderPosts;
+    const visiblePosts = imagesOnly ? folderPosts.filter(post => postPlatform(post) === 'pixiv' || post.media?.some(item => item.kind === 'image')) : folderPosts;
     const pageRange = renderPagination(visiblePosts.length);
     syncViewUrl();
     const folderNames = new Map(folders.map(folder => [folder.id, folder.name]));
     const cards = [];
+    clearPixivPreviews();
     for (const post of visiblePosts.slice(pageRange.start, pageRange.end)) {
       cards.push(await createPost(post, folderNames, nextMediaUrls));
       if (version !== renderVersion) {
@@ -557,11 +692,68 @@ function updatePlatformUi() {
   add.setAttribute('aria-label', add.title);
 }
 
+function createPixivPreview(post, body) {
+  const normalized = Nor1cSavedPosts.normalizePixivMedia(post);
+  const items = normalized.media.map(item => ({
+    platform: 'pixiv', kind: 'image', src: item.url, pageIndex: item.pageIndex,
+    artworkUrl: Nor1cSavedPosts.canonicalPixivPostUrl(post.url)?.url || ''
+  }));
+  const grid = element('div', `media-grid media-count-${Math.min(items.length, 4)}`);
+  normalized.media.slice(0, 4).forEach(item => {
+    const frame = element('div', 'media-item');
+    const image = element('img');
+    image.alt = `Pixiv page ${item.pageIndex + 1}`;
+    image.loading = 'lazy';
+    image.tabIndex = 0;
+    image.title = 'Open image viewer';
+    const open = () => openImageViewer(items, 0);
+    image.addEventListener('click', open);
+    image.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+    });
+    const start = () => {
+      frame.replaceChildren(image);
+      const job = loadPixivImage(image, item.thumbnailUrl || item.url, post.url, message => {
+        const retry = element('button', 'pixiv-retry', 'Retry image');
+        retry.type = 'button';
+        retry.title = message;
+        retry.setAttribute('aria-label', `Retry image: ${message}`);
+        retry.addEventListener('click', start);
+        frame.replaceChildren(retry);
+      });
+      pixivPreviewJobs.add(job);
+    };
+    frame.appendChild(image);
+    grid.appendChild(frame);
+    pixivPreviewStarts.set(frame, start);
+    pixivPreviewObserver.observe(frame);
+  });
+  body.appendChild(grid);
+  const controls = element('div', 'pixiv-preview-controls');
+  const count = element('button', 'pixiv-page-count', `${normalized.storedPageCount}/${normalized.totalPageCount} images${items.length > 4 ? ` · +${items.length - 4}` : ''}`);
+  count.type = 'button';
+  count.title = 'View all stored image links';
+  count.disabled = !items.length;
+  count.addEventListener('click', () => openImageViewer(items, 0));
+  controls.appendChild(count);
+  const canonical = Nor1cSavedPosts.canonicalPixivPostUrl(post.url);
+  if (canonical) {
+    const refresh = element('a', 'pixiv-refresh-link', normalized.mediaListVersion !== 1 ? 'Legacy list · Refresh all on Pixiv' : normalized.status === 'partial' ? 'Partial · Refresh all on Pixiv' : 'Refresh all on Pixiv');
+    refresh.href = canonical.url;
+    refresh.target = '_blank';
+    refresh.rel = 'noopener noreferrer';
+    refresh.title = 'Open this artwork, click SAVE, then Refresh all image links. Folders and saved date are kept.';
+    controls.appendChild(refresh);
+  }
+  body.appendChild(controls);
+}
+
 async function createPost(post, folderNames = new Map(), createdMediaUrls = mediaUrls) {
   const card = element('article', 'post post-entering');
   card.dataset.postId = String(post.id);
   const header = element('header', 'post-header');
   const isPixiv = post.platform === 'pixiv';
+  if (isPixiv) card.classList.add('pixiv-post');
   const author = element('div', 'post-author', post.author || (isPixiv ? 'Pixiv post' : 'X post'));
   const time = element('div', 'post-time', post.savedAt ? `Saved ${new Date(post.savedAt).toLocaleString()}` : '');
   author.appendChild(time);
@@ -591,7 +783,9 @@ async function createPost(post, folderNames = new Map(), createdMediaUrls = medi
   const body = element('div', 'post-body');
 
   const mediaItems = imagesOnly ? (post.media || []).filter(item => item.kind === 'image') : post.media || [];
-  if (mediaItems.length) {
+  if (isPixiv) {
+    createPixivPreview(post, body);
+  } else if (mediaItems.length) {
     const grid = element('div', `media-grid media-count-${Math.min(mediaItems.length, 4)}`);
     for (const item of mediaItems) {
       const frame = element('div', 'media-item');
@@ -841,7 +1035,7 @@ window.addEventListener('popstate', () => {
   updateImagesOnlyUi();
   renderPosts();
 });
-window.addEventListener('beforeunload', clearMediaUrls);
+window.addEventListener('beforeunload', () => { clearMediaUrls(); clearPixivPreviews(); clearPixivViewer(); });
 readViewFromUrl();
 updateImagesOnlyUi();
 updatePlatformUi();
