@@ -34,6 +34,10 @@ const COPY_FILES = [
   'saved-posts.css',
   'saved-posts.js',
   'background-saved-posts.js',
+  'saved-x-profiles.html',
+  'saved-x-profiles.css',
+  'saved-x-profiles.js',
+  'background-saved-x-profiles.js',
   'blocked.html',
   'blocked.css',
   'blocked.js'

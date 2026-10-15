@@ -27,11 +27,11 @@ button, input { font: inherit; }
 .icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-button:focus-visible { outline: 3px solid rgba(29, 155, 240, .28); outline-offset: 2px; }
 .icon-button:disabled { opacity: .55; cursor: wait; transform: none; }
-.platform-switcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid #e4e9ee; }
+.platform-switcher { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid #e4e9ee; }
 .platform-tab { display: grid; min-height: 36px; place-items: center; padding: 0 10px; border: 1px solid #dbe3ea; border-radius: 9px; background: #fff; color: #526273; font-weight: 700; text-decoration: none; cursor: pointer; }
 .platform-tab:hover, .platform-tab.is-active { border-color: #b9d8f5; background: #eff7ff; color: #1976d2; }
 .platform-tab:focus-visible { outline: 3px solid rgba(29, 155, 240, .28); outline-offset: 2px; }
-.folders-bar { display: flex; flex-direction: column; align-items: stretch; gap: 8px; overflow-y: auto; max-height: calc(100vh - 90px); padding: 10px 0; scrollbar-width: thin; }
+.folders-bar { display: flex; flex-direction: column; align-items: stretch; gap: 8px; overflow-y: auto; max-height: calc(100vh - 180px); padding: 10px 0; scrollbar-width: thin; }
 .folder-chip, .folder-add { flex: 0 0 auto; border: 1px solid #dbe3ea; border-radius: 999px; background: #fff; color: #526273; padding: 7px 12px; font-family: var(--font-ui); font-size: var(--text-base); line-height: 1.2; cursor: pointer; }
 .folder-chip:hover, .folder-add:hover, .folder-chip.is-active { border-color: #b9d8f5; background: #eff7ff; color: #1976d2; }
 .folder-chip-row { display: flex; min-width: 0; align-items: center; gap: 4px; }
@@ -148,7 +148,7 @@ button, input { font: inherit; }
   .page { display: block; padding: 0; }
   .saved-posts-content { padding: 18px 12px 32px; }
   .folders-sidebar { position: sticky; top: 0; z-index: 5; height: auto; padding: 8px 12px 0; border-right: 0; background: rgba(246, 248, 250, .94); backdrop-filter: blur(10px); }
-  .platform-switcher { width: min(260px, 100%); margin: 0 0 4px; padding-bottom: 4px; }
+  .platform-switcher { width: min(360px, 100%); grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 4px; padding-bottom: 4px; }
   .folders-bar { flex-direction: row; max-height: none; padding-top: 4px; overflow-x: auto; overflow-y: hidden; }
   .folder-chip { min-width: max-content; }
   .folder-add { align-self: center; }

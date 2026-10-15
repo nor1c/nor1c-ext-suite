@@ -724,6 +724,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('saved-x-posts-open-btn').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('saved-posts.html') });
   });
+  document.getElementById('saved-x-profiles-open-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('saved-x-profiles.html') });
+  });
   document.getElementById('saved-pixiv-posts-open-btn').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('saved-pixiv-posts.html') });
   });

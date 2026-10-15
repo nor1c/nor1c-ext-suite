@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-platform="x-profiles">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src https://pbs.twimg.com;">
+  <link rel="stylesheet" href="saved-posts.css">
+  <link rel="stylesheet" href="saved-x-profiles.css">
+  <title>Saved X Profiles — Nor1c Suite</title>
+</head>
+<body>
+  <main class="page">
+    <aside class="folders-sidebar">
+      <nav class="platform-switcher" aria-label="Saved collections">
+        <a class="platform-tab" href="saved-posts.html">X Posts</a>
+        <a class="platform-tab is-active" href="saved-x-profiles.html" aria-current="page">X Profiles</a>
+        <a class="platform-tab" href="saved-pixiv-posts.html">Pixiv</a>
+      </nav>
+      <h2 class="profiles-label">Profiles <span id="profile-count">0</span></h2>
+      <nav id="profiles-list" class="folders-bar" aria-label="Saved X profiles"></nav>
+    </aside>
+    <div class="saved-posts-content">
+      <header class="profiles-toolbar">
+        <div class="profile-heading"><h1 id="gallery-title">Saved X Profiles</h1><span id="gallery-summary"></span></div>
+        <div class="profile-toolbar-actions">
+          <div id="profile-actions" class="profile-toolbar-actions" hidden>
+            <button id="load-profile" class="icon-button" type="button" title="Load older photos" aria-label="Load older photos">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 5a7 7 0 0 0 11.7-2"/></svg>
+            </button>
+            <button id="stop-profile" class="icon-button" type="button" title="Stop loading" aria-label="Stop loading" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            </button>
+            <button id="delete-profile" class="icon-button" type="button" title="Remove profile" aria-label="Remove profile">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+            </button>
+          </div>
+          <button id="add-profiles" class="dialog-button dialog-button-primary" type="button" aria-haspopup="dialog" aria-controls="add-profiles-dialog">+ Add profile</button>
+        </div>
+      </header>
+      <p id="page-error" class="page-error" role="alert"></p>
+      <p id="empty-profiles" class="empty-state">No profiles yet. Select + Add profile.</p>
+      <section id="profile-gallery" hidden aria-labelledby="gallery-title">
+        <p id="collection-status" role="status" aria-live="polite" hidden></p>
+        <p id="empty-photos" class="empty-state" hidden>No photos yet. Use Load older photos; sign in on X if needed.</p>
+        <div id="profile-photos" class="posts-list images-only" aria-label="Profile photos"></div>
+        <nav id="photo-pagination" class="pagination" aria-label="Profile photos pagination" hidden>
+          <button id="photos-prev" class="pagination-button" type="button">Previous</button>
+          <span id="photos-page" class="pagination-status" aria-live="polite"></span>
+          <button id="photos-next" class="pagination-button" type="button">Next</button>
+        </nav>
+      </section>
+    </div>
+  </main>
+  <dialog id="add-profiles-dialog" class="folder-manager" aria-labelledby="add-profiles-title">
+    <form id="add-profiles-form" class="add-profiles-form">
+      <h2 id="add-profiles-title">Add X profiles</h2>
+      <label for="profile-urls">Profile links · one per line, up to 10</label>
+      <textarea id="profile-urls" rows="4" maxlength="20000" required autofocus placeholder="https://x.com/username/media?filter=photo" aria-describedby="profile-help add-profiles-error"></textarea>
+      <p id="profile-help">Opens X tabs to collect photo links, then closes those tabs when finished—even reused tabs. Sign in on X if needed.</p>
+      <p id="add-profiles-error" class="page-error" role="alert"></p>
+      <div class="profile-form-actions">
+        <button id="cancel-add-profiles" class="dialog-button" type="button">Cancel</button>
+        <button id="save-profiles" class="dialog-button dialog-button-primary" type="submit">Save &amp; load</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="profile-viewer" class="image-viewer" aria-label="Profile photo viewer">
+    <button id="viewer-close" class="icon-button image-viewer-close" type="button" aria-label="Close photo viewer">✕</button>
+    <button id="viewer-prev" class="viewer-nav viewer-nav-prev" type="button" aria-label="Previous photo">←</button>
+    <div class="profile-viewer-content"><img id="viewer-image" class="viewer-image" alt=""><p id="viewer-error" role="status" hidden>Image unavailable. Open the original post on X.</p></div>
+    <button id="viewer-next" class="viewer-nav viewer-nav-next" type="button" aria-label="Next photo">→</button>
+    <div class="profile-viewer-caption"><span id="viewer-count"></span><a id="viewer-post" target="_blank" rel="noopener noreferrer">Open original post</a></div>
+  </dialog>
+  <script src="lib/saved-x-profiles.js"></script>
+  <script src="saved-x-profiles.js"></script>
+</body>
+</html>
